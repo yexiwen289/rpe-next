@@ -376,6 +376,23 @@ export function createAgentEditorCommands(commands, editor, { controls, network,
   register('preview_capture', t('agent-editor.sac40096'), agentSchema(), 'read', () => ({ apply: async () => {
     if (!editor.agent.capabilities().images) throw Error(t('agent-editor.sb63e55b')); return { image: await capture() };
   } }));
+  // 视觉自检：跳到指定拍、短暂播放预览后截帧回传，供 AI 核对改动是否符合预期。
+  register('preview_check', '视觉自检（跳到指定秒截图）', agentSchema({ seconds: { type: 'number', min: 0 }, playSeconds: { type: 'number', min: 0, max: 8 } }), 'read', (args, { signal }) => ({ apply: async () => {
+    if (!editor.agent.capabilities().images) throw Error(t('agent-editor.sb63e55b'));
+    const seconds = Number.isFinite(Number(args.seconds)) ? Math.max(0, Number(args.seconds)) : null;
+    let restore = null;
+    try {
+      if (seconds != null && typeof editor.seek === 'function') { editor.seek(seconds, { music: false, pause: true }); }
+      if (typeof editor.beginPreviewSession === 'function') restore = editor.beginPreviewSession();
+      const playFor = Math.min(8, Math.max(0, Number(args.playSeconds) || 0));
+      if (playFor > 0 && typeof editor.play === 'function') {
+        await editor.play();
+        await new Promise(resolve => setTimeout(resolve, playFor * 1000));
+        if (typeof editor.pause === 'function') editor.pause();
+      }
+      return { image: await capture(), checkedAt: seconds, playSeconds: playFor };
+    } finally { restore?.(); }
+  } }));
   register('editor_capture', t('agent-editor.s862b27b'), agentSchema({ target: enumeration(['editor', 'timeline', 'panel', 'dialog', 'control']), handle: agentText }), 'read', (args, { signal }) => ({ apply: async () => {
     if (!editor.agent.capabilities().images) throw Error(t('agent-editor.sb63e55b'));
     if (!captureEditor) throw Error(t('agent-editor.sa2a28ec'));

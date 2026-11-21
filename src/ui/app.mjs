@@ -3,7 +3,9 @@
 import '../platform/locale-bootstrap.mjs';
 import { EditorSession } from '../application/session.mjs';
 import { FrameLimiter, validFpsLimit } from '../core/frame-timing.mjs';
-import { assertChart, createChart, diagnose, EVENT_TYPES, previewLimitations } from '../core/chart.mjs';
+import { assertChart, createChart, createNote, diagnose, EVENT_TYPES, previewLimitations } from '../core/chart.mjs';
+import { detectSections, energyFromFullScan } from '../core/section-detect.mjs';
+import { generateChartReport } from '../core/chart-report.mjs';
 import { beatValue, parseBeat, formatBeat, fromNumber, upperBound } from '../core/beat.mjs';
 import { TempoMap } from '../core/tempo.mjs';
 import { AudioTransport } from '../platform/audio.mjs';
@@ -253,6 +255,37 @@ for (const renderer of [preview, realtimePreview]) {
 const eventSampler = new EventSampler(element('.stage'), () => ({ session, tempo, preview, realtimePreview, previewVisible: preview.visible, timeline, seconds: chartSeconds, playing: () => audio.playing, sampleAutoFit: element('#sample-auto-fit').checked, pairedMovementSampling: element('#paired-movement-sampling').checked }), { invalidate, pause: () => playback.pause(), notify });
 const audioAnalysis = new AudioAnalysis(element('#audio-analysis-overlay'), () => timeline, () => audio, () => persistEditor());
 const audioSources = new AudioSources(() => audio), audioOnsets = new AudioOnsets({ getTiming: sourceOffset => mapperTiming(session.chart, sourceOffset) }); audioAnalysis.attachSources(audioSources, notify, audioOnsets);
+// DDC 起音点一键写成 Tap：只写 0 号线，按当前 BPM 换算拍数，保留同刻去重。
+audioAnalysis.onPeaksToNotes = peaks => {
+  if (!hasDocument || !peaks?.length || !session.chart.judgeLineList.length) return;
+  const line = session.chart.judgeLineList[0], factor = line.bpmfactor ?? 1;
+  const beatValue = value => Array.isArray(value) ? Number(value[0]) + Number(value[1] ?? 0) / Number(value[2] ?? 1) : Number(value);
+  const existing = new Set(line.notes.filter(note => note.type === 1).map(note => Math.round(beatValue(note.startTime) * 1000)));
+  let added = 0;
+  const notes = [...line.notes];
+  for (const peak of peaks) {
+    const beat = tempo.beat(peak.seconds, factor), key = Math.round(beat * 1000);
+    if (existing.has(key)) continue;
+    existing.add(key); notes.push(createNote(1, beat, 0)); added++;
+  }
+  notes.sort((a, b) => beatValue(a.startTime) - beatValue(b.startTime));
+  const next = structuredClone(session.chart); next.judgeLineList[0].notes = notes;
+  session.commit(`${t('app.s47261a4')} · DDC ${added}`, next);
+  notify(`已写入 ${added} 个 Tap 音符（DDC 起音）`, 'success');
+};
+// 自动段落检测：基于全曲 DDC salience 的能量突变，生成时间标记。
+audioAnalysis.onSectionsDetected = () => {
+  if (!hasDocument || !audio.buffer) { notify('请先打开带音乐的谱面', 'warning'); return; }
+  const entry = audioOnsets.fullScan?.get?.(audio.buffer);
+  const samples = entry ? energyFromFullScan(entry) : [];
+  if (samples.length < 8) { notify('全曲预分析尚未完成，请稍候再试', 'warning'); return; }
+  const sections = detectSections(samples, { minGap: 8, threshold: 1.45 });
+  if (!sections.length) { notify('未检测到明显段落边界', 'warning'); return; }
+  const existing = timelineMarkers().filter(marker => !String(marker.name).startsWith('段落') && !String(marker.name).startsWith('前奏 /') && !String(marker.name).startsWith('尾段 /'));
+  const markers = [...existing, ...sections].sort((a, b) => a.time - b.time);
+  session.commit(`${t('app.s0898b72')} · 自动分段 ${sections.length}`, { ...session.chart, markers });
+  notify(`已检测并写入 ${sections.length} 个段落标记`, 'success');
+};
 // AI 工作台徽标展示全曲预分析进度：progress 事件实时刷新，change 事件收尾复原。
 {
   const badge = element('#ai-scan-status');
@@ -758,7 +791,7 @@ function setHome(visible) {
   element('.workspace').hidden = visible;
   element('.transport').hidden = visible;
   element('#resume-editor').hidden = !hasDocument;
-  for (const selector of ['#save', '#export']) element(selector).disabled = !hasDocument;
+  for (const selector of ['#save', '#export', '#chart-report']) element(selector).disabled = !hasDocument;
   if (visible) { playback.pause(); timeline.cancelPlacement(); home.refresh().catch(reportError); }
   invalidate();
 }
@@ -1448,6 +1481,16 @@ element('#file-input').addEventListener('change', async event => {
 });
 listen('#save', () => save());
 listen('#export', () => { noiseEditor.flush(); showExportDialog(session.chart, assets, chartName, (name, format) => { status(t('app.s94b8e7e', { p0: name })); if (format === 'pez') { noteExternalBackup(); storagePanel.refresh().catch(() => {}); } }, libraryProject?.identifier ?? libraryProject?.info?.Path, fileOptions()); });
+// 体检报告：生成独立 HTML 下载，同时存一份到工作区供 AI 查阅。
+listen('#chart-report', () => {
+  if (!hasDocument) return;
+  const html = generateChartReport(session.chart, { title: chartName });
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob), anchor = document.createElement('a');
+  anchor.href = url; anchor.download = `${String(chartName || 'chart').replace(/[\\/:*?"<>|]/g, '_')}-体检报告.html`;
+  anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  status('谱面体检报告已生成并下载');
+});
 listen('#view-toggle', () => {
   if (preview.visible) { togglePreview(false, true); setDrawer('preview', false); }
   else setDrawer('preview', true);
@@ -1947,10 +1990,27 @@ listen('#knowledge-open', () => {
   knowledgePanel.setVisible(true);
 });
 
+// 解析 LRC 歌词为时间轴标记（{time 秒, name}），过滤元信息行与空行。
+function parseLrcMarkers(lrc, limit = 400) {
+  if (typeof lrc !== 'string' || !lrc) return [];
+  const markers = [];
+  for (const line of lrc.split(/\r?\n/)) {
+    const match = /^\s*\[(\d{1,3}):(\d{1,2}(?:\.\d{1,3})?)\](.*)$/.exec(line);
+    if (!match) continue; // 跳过 [ar:...] [ti:...] 等元信息与普通文本
+    const text = match[3].replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+    const time = Number(match[1]) * 60 + Number(match[2]);
+    if (!Number.isFinite(time)) continue;
+    markers.push({ time, name: text.slice(0, 120) });
+    if (markers.length >= limit) break;
+  }
+  return markers.sort((a, b) => a.time - b.time);
+}
+
 // 网易云一键流水线：搜索 → 拉取封面+音乐 → 新建谱面 → DDC 全曲预分析 → 进入 AI 工作台
 mountNeteaseSearch({
   host: element('#netease-host'),
-  onPick: async ({ song, audioBytes, coverBytes, coverName, audioName }) => {
+  onPick: async ({ song, audioBytes, coverBytes, coverName, audioName, lyric }) => {
     try {
       const apply = async () => {
         const chart = createChart();
@@ -1961,13 +2021,16 @@ mountNeteaseSearch({
           song: audioName,
           background: coverBytes ? coverName : chart.META.background,
         };
+        // 网易云 LRC 歌词转成时间轴标记，供 AI 按歌词语义编排演出。
+        const lyricMarkers = parseLrcMarkers(lyric);
+        if (lyricMarkers.length) chart.markers = lyricMarkers;
         const nextAssets = new Map();
         nextAssets.set(audioName, audioBytes);
         if (coverBytes) nextAssets.set(coverName, coverBytes);
         replaceChart(chart, chart.META.name, nextAssets);
         const ok = await loadMusic(audioBytes, audioName, false, false);
         if (!ok) throw Error('音乐载入失败');
-        status(`已从网易云导入《${song?.name ?? audioName}》，DDC 全曲分析在后台进行，可直接向 AI 提要求。`);
+        status(`已从网易云导入《${song?.name ?? audioName}》，${lyricMarkers.length ? `已写入 ${lyricMarkers.length} 条歌词标记，` : ''}DDC 全曲分析在后台进行，可直接向 AI 提要求。`);
       };
       if (hasDocument && (session.history.dirty || assetDirty)) confirmAction(t('app.s13472be'), () => apply().catch(reportError));
       else await apply();

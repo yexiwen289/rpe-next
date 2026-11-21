@@ -106,12 +106,28 @@ export class AudioAnalysis {
     this.width = 0.62;
     this.data = null;
     this.layers = []; this.analysisCache = new WeakMap(); this.waveformCache = new WeakMap();
+    this.showFullScan = true;   // 叠加全曲 DDC 预分析起音点
+    this.fullScanCache = null;  // { buffer, peaks } —— 预分析完成后刷新
+    this.onPeaksToNotes = null; // 由 app 注入：把全曲 peaks 写成 Tap 音符
+    this.onSectionsDetected = null; // 由 app 注入：自动分段生成 markers
   }
 
   setBuffer(buffer) { if (this.sources) { this.sources.reset(buffer); return; } this.data = analyseAudioBuffer(buffer); this.layers = this.data ? [{ data: this.data, color: '#5db9d4', id: 'original', buffer }] : []; this.draw(); }
   attachSources(sources, notify, onsets) {
     this.sources = sources; this.onsets = onsets; this.sourcePanel = new AudioSourcesPanel(sources, notify, onsets);
-    onsets?.addEventListener('change', () => { if (onsets.preview && onsets.preview !== this.previewResult) { this.previewResult = onsets.preview; this.enabled = true; if (this.enabledInput) this.enabledInput.checked = true; this.onChange(); } this.draw(this.lastOffsetSeconds ?? 0); });
+    onsets?.addEventListener('change', () => {
+      // 全曲预分析完成后刷新起音点缓存（segment 走缓存不重跑模型）。
+      const buffer = this.getAudio()?.buffer;
+      if (buffer && typeof onsets.fullScanStatus === 'function' && onsets.fullScanStatus(buffer)?.status === 'done') {
+        if (this.fullScanCache?.buffer !== buffer) {
+          try { const result = onsets.segment(buffer, 0, buffer.duration); this.fullScanCache = { buffer, peaks: result?.peaks ?? [] }; }
+          catch { this.fullScanCache = { buffer, peaks: [] }; }
+        }
+      } else this.fullScanCache = null;
+      this.refreshFullScanUI?.();
+      if (onsets.preview && onsets.preview !== this.previewResult) { this.previewResult = onsets.preview; this.enabled = true; if (this.enabledInput) this.enabledInput.checked = true; this.onChange(); }
+      this.draw(this.lastOffsetSeconds ?? 0);
+    });
     const refresh = async () => {
       if (onsets?.preview && (!sources.original || onsets.preview.sourceRevision !== sources.revision || onsets.preview.selection !== sources.selectedIds.join('\0'))) onsets.clearPreview();
       const selection = sources.selectedIds.join('\0'); if (this.originalAudio && this.originalAudio !== sources.original || this.sourceSelection && this.sourceSelection !== selection) onsets?.cancel(); this.originalAudio = sources.original; this.sourceSelection = selection;
@@ -139,6 +155,21 @@ export class AudioAnalysis {
     const enabledInput = document.createElement('input'); enabledInput.type = 'checkbox'; enabledInput.checked = this.enabled;
     this.enabledInput = enabledInput;
     enabledInput.oninput = () => { this.enabled = enabledInput.checked; this.onChange(); this.draw(this.lastOffsetSeconds ?? 0); }; enabled.append(enabledInput); host.append(enabled);
+    // 全曲 DDC 起音叠加开关 + 一键生成音符。
+    const fullScanRow = document.createElement('div'); fullScanRow.className = 'audio-fullscan-row';
+    const fullScanLabel = document.createElement('label'); fullScanLabel.className = 'field'; fullScanLabel.append('显示 DDC 起音点（全曲预分析）');
+    const fullScanInput = document.createElement('input'); fullScanInput.type = 'checkbox'; fullScanInput.checked = this.showFullScan;
+    fullScanInput.oninput = () => { this.showFullScan = fullScanInput.checked; this.draw(this.lastOffsetSeconds ?? 0); }; fullScanLabel.append(fullScanInput); fullScanRow.append(fullScanLabel);
+    const makeNotes = document.createElement('button'); makeNotes.type = 'button'; makeNotes.className = 'audio-fullscan-notes';
+    const refreshCount = () => { const count = this.fullScanCache?.peaks?.length ?? 0; makeNotes.textContent = count ? `把这些起音写成 Tap（${count}）` : 'DDC 预分析完成后可写音符'; makeNotes.disabled = !count || !this.onPeaksToNotes; };
+    refreshCount();
+    makeNotes.onclick = () => { if (this.fullScanCache?.peaks?.length) this.onPeaksToNotes(this.fullScanCache.peaks); refreshCount(); };
+    fullScanRow.append(makeNotes);
+    const detectSections = document.createElement('button'); detectSections.type = 'button'; detectSections.className = 'audio-fullscan-notes';
+    detectSections.textContent = '自动检测段落并加标记';
+    detectSections.onclick = () => this.onSectionsDetected?.();
+    fullScanRow.append(detectSections); host.append(fullScanRow);
+    this.refreshFullScanUI = refreshCount;
     const alpha = document.createElement('label'); alpha.className = 'field'; alpha.append(t('audio-analysis.s61b101b'));
     const alphaInput = document.createElement('input'); alphaInput.type = 'range'; alphaInput.min = '0.02'; alphaInput.max = '1'; alphaInput.step = '0.01'; alphaInput.value = this.alpha;
     alphaInput.oninput = () => { this.alpha = Number(alphaInput.value); this.onChange(); this.draw(this.lastOffsetSeconds ?? 0); }; alpha.append(alphaInput); host.append(alpha);
@@ -215,6 +246,18 @@ export class AudioAnalysis {
       for (const peak of preview.peaks) {
         const seconds = peak.seconds + preview.offsetSeconds - offsetSeconds, y = timeline.vertical(timeline.tempo.beat(seconds, timeline.factor)); if (y < 0 || y > timelineHeight) continue;
         context.beginPath(); context.moveTo(center - half, y); context.lineTo(center + half, y); context.stroke();
+      }
+    }
+    // 全曲 DDC 预分析起音点：金色横线，置信度越高越亮。
+    const fullScan = this.showFullScan ? this.fullScanCache : null;
+    if (fullScan?.peaks?.length && fullScan.buffer === this.getAudio()?.buffer) {
+      for (const peak of fullScan.peaks) {
+        const seconds = peak.seconds - offsetSeconds, y = timeline.vertical(timeline.tempo.beat(seconds, timeline.factor));
+        if (y < 0 || y > timelineHeight) continue;
+        const confidence = Math.min(1, Math.max(0, Number(peak.confidence) || 0.6));
+        context.globalAlpha = .25 + confidence * .6;
+        context.strokeStyle = '#ffcf5c'; context.lineWidth = confidence > .8 ? 2 : 1;
+        context.beginPath(); context.moveTo(center - half * .8, y); context.lineTo(center + half * .8, y); context.stroke();
       }
     }
     context.restore();

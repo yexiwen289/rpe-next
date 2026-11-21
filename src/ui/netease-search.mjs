@@ -175,6 +175,7 @@ export function mountNeteaseSearch({ host, onPick } = {}) {
         coverBytes,
         coverName,
         audioName: audio.name || audioName,
+        lyric: info.lyric || null,
       });
       setStatus(`已选择：${songName}`);
     } catch (error) {

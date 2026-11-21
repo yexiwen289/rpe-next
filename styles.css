@@ -2201,3 +2201,32 @@ button.primary:hover, .primary:hover, .home-ai-hero-actions button.primary:hover
   .ai-workspace-badge.is-scanning { animation: none; }
   .netease-progress-bar:not([value])::after { animation: none; }
 }
+
+/* AI 消息气泡：撤销本条改动 */
+.agent-turn-actions .agent-turn-undo {
+  border-color: rgba(255,138,138,.45); color: #ff9b9b;
+}
+.agent-turn-actions .agent-turn-undo:hover {
+  background: rgba(255,138,138,.14); border-color: #ff8a8a; color: #ffb3b3;
+}
+.agent-turn-undone { align-self: center; font-size: 11px; color: var(--text-muted); padding: 4px 8px; }
+
+/* 音频分析：全曲 DDC 起音叠加控制 */
+.audio-fullscan-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0; }
+.audio-fullscan-row .field { margin: 0; }
+.audio-fullscan-notes {
+  padding: 6px 12px; border: 1px solid var(--accent); border-radius: var(--r-md);
+  background: var(--accent-soft); color: var(--accent-strong); cursor: pointer; font: inherit; font-size: 12px;
+}
+.audio-fullscan-notes:hover:not(:disabled) { background: var(--accent); color: var(--accent-ink); }
+.audio-fullscan-notes:disabled { opacity: .5; cursor: not-allowed; border-color: var(--border-strong); color: var(--text-muted); background: transparent; }
+
+/* 多模型评审团弹窗 */
+.agent-jury-dialog { width: min(860px, 92vw); max-height: 86vh; overflow: auto; border: 1px solid var(--border-strong); border-radius: var(--r-lg); background: var(--bg-panel); color: var(--text); padding: 22px 26px; }
+.agent-jury-dialog::backdrop { background: rgba(0,0,0,.6); }
+.agent-jury-dialog h3 { margin: 0 0 6px; color: var(--accent-strong); font-size: 17px; }
+.agent-jury-models { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; max-height: 180px; overflow: auto; margin: 12px 0; padding: 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-input); }
+.agent-jury-model { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
+.agent-jury-model span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-jury-dialog textarea { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: var(--r-md); background: var(--bg-input); color: var(--text); font: inherit; font-size: 13px; resize: vertical; }
+.agent-jury-result { margin: 14px 0; padding: 14px; max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-root); color: var(--text-secondary); font-size: 12px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }

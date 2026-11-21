@@ -4,6 +4,7 @@ import { AgentConversationRepository } from '../platform/agent-store.mjs';
 import { showAgentExchange } from './agent-inspector.mjs';
 import { AGENT_CORE_TOOLS, agentContextPolicy, agentContextUsage, agentContextSignature, estimateAgentTokens, prepareAgentHistory } from '../core/agent-context.mjs';
 import { t } from '../i18n.mjs';
+import { runModelJury } from '../application/model-jury.mjs';
 
 const text = (tag, value, className = '') => { const node = document.createElement(tag); node.textContent = value; node.className = className; return node; };
 const button = (label, action) => { const node = text('button', label); node.type = 'button'; node.onclick = action; return node; };
@@ -65,6 +66,7 @@ export class AgentDialogues {
     this.modelSelect.setAttribute('aria-label', '模型');
     this.modelSelect.className = 'agent-model-select';
     this.modelConfig = button('⚙', () => panel.configuration()); this.modelConfig.className = 'agent-model-config'; this.modelConfig.title = '模型与 API 配置';
+    this.juryButton = button('⚖', () => this.openJury()); this.juryButton.className = 'agent-model-config'; this.juryButton.title = '多模型评审团（并发出方案，择优采纳）';
     // 先用内置列表瞬时填充，再用 /models 接口拉账号实际可用模型补全下拉。
     const fillModels = (names, current) => {
       this.modelSelect.replaceChildren(...names.map(name => { const option = text('option', name); option.value = name; return option; }));
@@ -99,7 +101,7 @@ export class AgentDialogues {
       panel.settings = { ...panel.settings, provider: this.providerSelect.value, model: this.modelSelect.value };
       panel.persist(); panel.refreshCapabilities?.(); panel.dialogues.updateStatus();
     };
-    modelBar.append(text('span', '◇', 'agent-model-icon'), this.providerSelect, this.modelSelect, this.modelConfig);
+    modelBar.append(text('span', '◇', 'agent-model-icon'), this.providerSelect, this.modelSelect, this.juryButton, this.modelConfig);
     panel.refreshModelBar = () => {
       this.providerSelect.value = panel.providers.entries.has(panel.settings.provider) ? panel.settings.provider : 'deepseek';
       refreshModels();
@@ -223,6 +225,9 @@ export class AgentDialogues {
       const { contextMessages, compacted, runId, ...result } = event.detail;
       Object.assign(current.turn, result); current.turn.answer = current.view.answerContent.dataset.markdownSource ?? '';
       if (compacted && current.contextMode === 'all') current.record.memory = { through: current.turn.id, messages: contextMessages };
+      // 记录本轮 AI 产生的 undo 步数，供消息气泡上的「撤销」按钮使用。
+      const depthNow = this.panel.editor?.raw?.session?.history?.undoStack?.length ?? 0;
+      if (typeof current.turn.undoDepth === 'number' && event.detail.status === 'completed') current.turn.undoSteps = Math.max(0, depthNow - current.turn.undoDepth);
       current.view.work.open = false; current.view.meta.textContent = agentUsageText(event.detail.statistics); current.view.actions.hidden = false;
       current.view.meta.title = t('agent-dialogues.s47c3221', { p0: time(event.detail.statistics.requestMs) });
       current.view.work.querySelector('summary').textContent = t('agent-dialogues.s94935d8', { p0: event.detail.statistics.requests, p1: event.detail.statistics.tools });
@@ -287,6 +292,14 @@ export class AgentDialogues {
       if (turn.status === 'cancelled') { meta.textContent = t('agent-dialogues.se8710fe'); work.hidden = true; }
       actions.append(button(t('agent-dialogues.sc43e777'), () => this.edit(record, turn, user)), button(t('agent-dialogues.se2d53a6'), () => turn.compactOnly ? this.compact() : this.resend(record, turn, turn.text)));
       for (const action of actions.children) action.title = t('agent-dialogues.s8353df8');
+      // 撤销本条 AI 消息产生的谱面改动（仅当本轮确实写入过历史）。
+      if (turn.undoSteps > 0 && !turn.undone && !this.panel.agent?.busy) {
+        const undo = button('↩ 撤销改动', () => this.undoTurn(record, turn));
+        undo.className = 'agent-turn-undo'; undo.title = `回滚本条消息产生的 ${turn.undoSteps} 步谱面改动`;
+        actions.append(undo);
+      } else if (turn.undone) {
+        const done = text('span', '已撤销', 'agent-turn-undone'); actions.append(done);
+      }
     }
     for (const entry of turn.process ?? []) {
       if (entry.kind === 'tool') workContent.append(this.jsonDetail(entry.name, { arguments: entry.arguments, result: entry.result }));
@@ -394,7 +407,7 @@ export class AgentDialogues {
     const generation = this.generation, selected = this.store.selected; await Promise.all([this.panel.credentialsReady, this.ready]); if (generation !== this.generation) return;
     const panel = this.panel, record = this.store.records.get(selected) ?? this.store.current, value = compactOnly ? t('agent-dialogues.s14a8486') : source.trim(); if (!value) return;
     if (!panel.key) { panel.configuration(); return; }
-    const turn = { id: crypto.randomUUID(), text: value, instruction, compactOnly, status: 'queued', process: [], messages: compactOnly ? [] : [{ role: 'user', content: value }], answer: '', createdAt: Date.now(), queueOrder: Date.now() + (this.sequence = (this.sequence ?? 0) + 1) / 1000 };
+    const turn = { id: crypto.randomUUID(), text: value, instruction, compactOnly, status: 'queued', process: [], messages: compactOnly ? [] : [{ role: 'user', content: value }], answer: '', createdAt: Date.now(), undoDepth: this.panel.editor?.raw?.session?.history?.undoStack?.length ?? 0, queueOrder: Date.now() + (this.sequence = (this.sequence ?? 0) + 1) / 1000 };
     if (!record.turns.length && record.title === t('agent-dialogues.s1b7abf9')) record.title = value.replace(/\s+/g, ' ').slice(0, 24);
     const parent = this.recordView(record); record.turns.push(turn); this.turnView(record, turn, parent); if (this.store.current === record && !compactOnly) panel.input.value = ''; record.draft = ''; this.save(turn); this.autoQueue = true; this.updateChoices(); this.updateBusy(); this.scroll(true); this.drain();
   }
@@ -431,6 +444,64 @@ export class AgentDialogues {
     const edit = document.createElement('textarea'); edit.className = 'agent-history-editor'; edit.value = turn.text; edit.setAttribute('aria-label', t('agent-dialogues.s0ef9d53')); const actions = text('div', '', 'agent-actions');
     const hint = text('small', t('agent-dialogues.s10fffe4'), 'hint');
     actions.append(button(t('agent-dialogues.sa4e6f10'), () => this.resend(record, turn, edit.value)), button(t('agent-dialogues.s4d0b468'), () => { edit.remove(); actions.remove(); hint.remove(); })); this.expandMessage(user, true); user.querySelector('.agent-message-body').append(edit, hint, actions); edit.focus();
+  }
+  async openJury() {
+    const panel = this.panel;
+    if (!panel.editor?.hasDocument) { panel.notify('请先打开谱面', 'warning'); return; }
+    // 候选项：用当前供应商的模型列表，默认选中当前模型。
+    const provider = panel.providers.get(panel.settings.provider);
+    if (!provider) return;
+    let names = provider.models ?? [];
+    if (typeof provider.listModels === 'function') {
+      try { names = await provider.listModels(panel.config()); } catch { /* 用内置列表 */ }
+    }
+    const dialog = document.createElement('dialog'); dialog.className = 'agent-jury-dialog';
+    const heading = text('h3', '⚖ 多模型评审团'); dialog.append(heading);
+    dialog.append(text('p', '同一任务并发发给多个模型，各自只出方案文本（不改谱面），按问题数/具体度打分。选中满意方案后可复制或让 AI 执行。', 'hint'));
+    const list = text('div', '', 'agent-jury-models');
+    for (const name of names.slice(0, 60)) {
+      const label = text('label', '', 'agent-jury-model');
+      const check = document.createElement('input'); check.type = 'checkbox'; check.value = name;
+      if (name === panel.settings.model) check.checked = true;
+      label.append(check, text('span', name)); list.append(label);
+    }
+    dialog.append(list);
+    const task = document.createElement('textarea'); task.rows = 3; task.placeholder = '评审任务，例如：检查副歌段密度并给出优化方案'; task.value = '检查这张谱面的可读性与密度，给出具体优化方案';
+    dialog.append(task);
+    const result = text('pre', '', 'agent-jury-result'); result.hidden = true; dialog.append(result);
+    const actions = text('div', '', 'agent-actions');
+    const close = button('关闭', () => dialog.close()); actions.append(close);
+    const run = button('开始评审', async () => {
+      const chosen = [...list.querySelectorAll('input:checked')].map(input => input.value);
+      if (!chosen.length) { panel.notify('至少选一个模型', 'warning'); return; }
+      run.disabled = true; task.disabled = true; result.hidden = false; result.textContent = '评审中…（并发请求，请稍候）';
+      try {
+        const config = panel.config();
+        const jurors = chosen.map(model => ({ id: model, name: `${provider.name} · ${model}`, model, config: { ...config, model }, provider }));
+        const report = await runModelJury({ jurors, chart: panel.editor.raw.session.chart, task: task.value });
+        result.textContent = report.proposals.map((p, i) =>
+          `#${i + 1} ${p.name}${p.error ? `（失败：${p.error}）` : ` · 评分 ${p.score}`}\n${'─'.repeat(48)}\n${p.text || '（无方案）'}\n`).join('\n\n');
+      } catch (error) { result.textContent = `评审失败：${error.message}`; }
+      finally { run.disabled = false; task.disabled = false; }
+    });
+    actions.append(run); dialog.append(actions);
+    document.body.append(dialog); dialog.showModal();
+    dialog.addEventListener('close', () => dialog.remove(), { once: true });
+  }
+  undoTurn(record, turn) {
+    if (this.panel.agent?.busy || !turn.undoSteps) return;
+    const session = this.panel.editor?.raw?.session;
+    if (!session?.travel) { this.panel.notify('无法撤销：编辑器历史不可用', 'warning'); return; }
+    // 从最新往回撤，撤满本条消息写入的步数；期间历史可能变短则提前停止。
+    let done = 0;
+    for (let i = 0; i < turn.undoSteps; i++) {
+      if (!session.history.undoStack.length) break;
+      session.travel('undo'); done++;
+    }
+    turn.undone = true; turn.undoSteps = 0;
+    this.save(turn); this.refreshTurn(record, turn);
+    this.panel.editor?.invalidate?.();
+    this.panel.notify(`已撤销本条 AI 改动（${done} 步）`, 'success');
   }
   resend(record, turn, source) {
     if (this.panel.agent.busy || !source.trim()) return;

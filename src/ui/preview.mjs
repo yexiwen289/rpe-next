@@ -173,7 +173,8 @@ export class Preview {
       this.captureOverflowSource(overflowFrame, true); this.overflowCompleteSceneCaptured = true;
       context.save(); context.beginPath(); context.rect(viewport.left, viewport.top, viewport.width, viewport.height); context.clip();
     }
-    this.noisePreview.drawGuides(context, scale, this.selectedNoiseArea, this.lineNumbers);
+    // 游戏预览保持纯净：不随判定线编号开关显示噪域名称；仅选中噪域时显示引导。
+    this.noisePreview.drawGuides(context, scale, this.selectedNoiseArea, false);
     context.restore();
     const shaderRendered = renderShaders(globalEffects, true);
     if (integratedOverflow) { this.overflowReady = false; this.overflowCompositor = null; }

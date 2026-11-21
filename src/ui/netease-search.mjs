@@ -45,18 +45,34 @@ export function mountNeteaseSearch({ host, onPick } = {}) {
   button.type = 'button';
   bar.append(input, button);
   const status = make('div', 'netease-status', neteaseAvailable() ? '' : '网页端不支持，请用桌面端');
+  const progressWrap = make('div', 'netease-progress');
+  const progressLabel = make('span', 'netease-progress-label');
+  const progressBar = document.createElement('progress');
+  progressBar.className = 'netease-progress-bar'; progressBar.max = 100; progressBar.value = 0;
+  progressWrap.append(progressLabel, progressBar); progressWrap.hidden = true;
   const results = make('div', 'netease-results');
-  root.append(bar, status, results);
+  root.append(bar, status, progressWrap, results);
   container.appendChild(root);
 
   const setStatus = message => { if (!disposed) status.textContent = message || ''; };
   const setBusy = busy => { if (!disposed) button.disabled = busy; };
+  // 下载进度：不传 total 时为不确定态（循环动画）；传了则按字节比例。
+  const setProgress = (label, loaded, total) => {
+    if (disposed) return;
+    if (label == null) { progressWrap.hidden = true; return; }
+    progressWrap.hidden = false;
+    progressLabel.textContent = total > 0
+      ? `${label} ${Math.min(100, Math.round(loaded / total * 100))}%（${(loaded / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB）`
+      : `${label} ${(loaded / 1048576).toFixed(1)} MB`;
+    if (total > 0) { progressBar.max = 100; progressBar.value = Math.min(100, loaded / total * 100); }
+    else { progressBar.removeAttribute('value'); }
+  };
 
-  function loadCover(url) {
+  function loadCover(url, onProgress) {
     if (!url || typeof url !== 'string') return Promise.resolve(null);
     if (!coverCache.has(url)) {
       coverCache.set(url, (async () => {
-        const data = await neteaseCall('download', { url, name: 'cover.jpg' });
+        const data = await neteaseCall('download', { url, name: 'cover.jpg' }, { onProgress });
         if (!data.bytes?.byteLength) return null;
         const mime = typeof data.mime === 'string' && data.mime.startsWith('image/') ? data.mime : 'image/jpeg';
         const blob = new Blob([data.bytes], { type: mime });
@@ -132,13 +148,16 @@ export function mountNeteaseSearch({ host, onPick } = {}) {
       const songName = info.name || song.name || 'song';
       const artist = info.artist || song.artist || '';
       const audioName = safeFileName(artist ? `${artist} - ${songName}` : songName, 'song', '.mp3');
-      const audio = await neteaseCall('download', { url: info.url, name: audioName });
+      const audio = await neteaseCall('download', { url: info.url, name: audioName }, {
+        onProgress: value => setProgress('下载音频', value.loaded, value.total),
+      });
       if (disposed) return;
 
       let coverBytes = null;
       let coverName = 'cover.jpg';
       if (song.image) {
-        const entry = await loadCover(song.image);
+        setStatus('正在下载封面…');
+        const entry = await loadCover(song.image, value => setProgress('下载封面', value.loaded, value.total));
         if (!disposed) {
           coverBytes = entry?.bytes ?? null;
           coverName = safeFileName(
@@ -148,6 +167,7 @@ export function mountNeteaseSearch({ host, onPick } = {}) {
         }
       }
       if (disposed) return;
+      setProgress(null);
 
       onPick?.({
         song: { ...song, ...info },
@@ -160,6 +180,7 @@ export function mountNeteaseSearch({ host, onPick } = {}) {
     } catch (error) {
       setStatus('下载失败：' + (error?.message || '未知错误'));
     } finally {
+      setProgress(null);
       picking = false;
       if (!disposed) setBusy(false);
     }

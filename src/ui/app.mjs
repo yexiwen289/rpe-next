@@ -253,6 +253,23 @@ for (const renderer of [preview, realtimePreview]) {
 const eventSampler = new EventSampler(element('.stage'), () => ({ session, tempo, preview, realtimePreview, previewVisible: preview.visible, timeline, seconds: chartSeconds, playing: () => audio.playing, sampleAutoFit: element('#sample-auto-fit').checked, pairedMovementSampling: element('#paired-movement-sampling').checked }), { invalidate, pause: () => playback.pause(), notify });
 const audioAnalysis = new AudioAnalysis(element('#audio-analysis-overlay'), () => timeline, () => audio, () => persistEditor());
 const audioSources = new AudioSources(() => audio), audioOnsets = new AudioOnsets({ getTiming: sourceOffset => mapperTiming(session.chart, sourceOffset) }); audioAnalysis.attachSources(audioSources, notify, audioOnsets);
+// AI 工作台徽标展示全曲预分析进度：progress 事件实时刷新，change 事件收尾复原。
+{
+  const badge = element('#ai-scan-status');
+  audioOnsets.addEventListener('progress', () => {
+    if (!badge || !audioOnsets.progress) return;
+    const p = audioOnsets.progress;
+    badge.textContent = p.total > 0 ? `DDC 预分析 ${Math.min(100, Math.round(p.completed / p.total * 100))}%` : (p.message || 'DDC 预分析中…');
+    badge.classList.add('is-scanning');
+  });
+  audioOnsets.addEventListener('change', () => {
+    if (!badge || audioOnsets.progress) return;
+    const status = audio.buffer ? audioOnsets.fullScanStatus(audio.buffer) : null;
+    badge.textContent = status?.status === 'done' ? `DDC 就绪 · ${status.segments} 段` : status?.status === 'error' ? 'DDC 分析失败' : 'AI FIRST';
+    badge.classList.toggle('is-scan-done', status?.status === 'done');
+    badge.classList.remove('is-scanning');
+  });
+}
 let noteHoverTimer = null;
 let noteHoverKey = null;
 function clearNoteSourceToast() {

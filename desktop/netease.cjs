@@ -220,18 +220,25 @@ function installNetease({ ipcMain, net, origin, window: getWindow } = {}) {
     };
   }
 
-  async function download(payload) {
+  async function download(payload, event) {
     if (!isAllowedNeteaseUrl(payload?.url)) throw Error('下载链接无效或不安全');
     const name = text(payload?.name, 200) || 'download';
+    const token = typeof payload?.token === 'string' ? payload.token.slice(0, 100) : '';
+    const emit = (loaded, total) => {
+      if (!token || !event?.sender || event.sender.isDestroyed?.()) return;
+      event.sender.send('rpen-netease-progress', { token, loaded, total });
+    };
     const result = await withFetch(payload.url, { headers: DOWNLOAD_HEADERS }, async response => {
       if (!isAllowedNeteaseUrl(response.url || payload.url)) throw Error('下载链接被重定向到不安全地址');
       if (!response.ok) throw Error('下载失败（HTTP ' + response.status + '）');
       const header = response.headers.get('content-type') || '';
       const mime = text(header.split(';')[0], 100) || 'application/octet-stream';
       if (!response.body?.getReader) throw Error('下载失败：无法读取文件内容');
+      const lengthHeader = Number(response.headers.get('content-length'));
+      const known = Number.isFinite(lengthHeader) && lengthHeader > 0 ? lengthHeader : 0;
       const reader = response.body.getReader();
       const chunks = [];
-      let total = 0;
+      let total = 0, lastReport = 0;
       try {
         for (;;) {
           const { value, done } = await reader.read();
@@ -239,10 +246,13 @@ function installNetease({ ipcMain, net, origin, window: getWindow } = {}) {
           total += value.byteLength;
           if (total > MAX_DOWNLOAD) throw Error('文件过大（超过 32MB）');
           chunks.push(value);
+          // 每 64KB 或 120ms 上报一次，避免高频 IPC。
+          if (total - lastReport >= 65536 || !lastReport) { lastReport = total; emit(total, known || total); }
         }
       } finally {
         reader.releaseLock();
       }
+      emit(total, known || total);
       const bytes = new Uint8Array(total);
       let offset = 0;
       for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
@@ -257,7 +267,7 @@ function installNetease({ ipcMain, net, origin, window: getWindow } = {}) {
     const action = payload?.action;
     if (typeof action !== 'string' || !Object.hasOwn(actions, action)) return { ok: false, error: '未知操作' };
     try {
-      return await actions[action](payload);
+      return await actions[action](payload, event);
     } catch (error) {
       return { ok: false, error: text(error?.message, 200) || '请求失败' };
     }

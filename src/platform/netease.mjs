@@ -6,9 +6,20 @@ export function neteaseAvailable() {
   return typeof globalThis.rpenNetease?.call === 'function';
 }
 
-export async function neteaseCall(action, payload = {}) {
+export async function neteaseCall(action, payload = {}, { onProgress } = {}) {
   if (!neteaseAvailable()) throw new Error(WEB_UNSUPPORTED);
-  const response = await globalThis.rpenNetease.call(action, payload);
+  let dispose;
+  if (typeof onProgress === 'function' && typeof globalThis.rpenNetease.onProgress === 'function') {
+    const token = crypto.randomUUID();
+    dispose = globalThis.rpenNetease.onProgress(value => { if (value?.token === token) onProgress(value); });
+    payload = { ...payload, token };
+  }
+  let response;
+  try {
+    response = await globalThis.rpenNetease.call(action, payload);
+  } finally {
+    dispose?.();
+  }
   if (!response || response.ok !== true) {
     throw new Error(response?.error || `网易云音乐请求失败（${action}）`);
   }

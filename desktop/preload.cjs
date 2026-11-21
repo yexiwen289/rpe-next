@@ -8,6 +8,11 @@ contextBridge.exposeInMainWorld('rpenAgentCapture', { version: 1, capture: rect 
 contextBridge.exposeInMainWorld('rpenNetease', {
   version: 1,
   call: (action, payload = {}) => ipcRenderer.invoke('rpen-netease', { ...payload, action }),
+  onProgress: callback => {
+    const handler = (event, value) => callback(value);
+    ipcRenderer.on('rpen-netease-progress', handler);
+    return () => ipcRenderer.removeListener('rpen-netease-progress', handler);
+  },
 });
 contextBridge.exposeInMainWorld('rpenAudioStorage', {
   version: 1,

@@ -55,6 +55,38 @@ export class AgentDialogues {
     const row = text('div', '', 'agent-conversations'); this.select = document.createElement('select'); this.select.setAttribute('aria-label', t('agent-dialogues.s37f4358')); this.select.onchange = () => this.show(this.select.value);
     panel.clear = button(t('agent-dialogues.s90f8d10'), () => this.show(this.store.create().id));
     const manage = button(t('agent-dialogues.s4989b5c'), () => this.manage()); manage.title = t('agent-dialogues.s098d189'); row.append(this.select, panel.clear, manage);
+    // 顶部模型/供应商切换器：让 AI 工作台成为主界面后可直接换模型，无需打开配置弹窗
+    const modelBar = text('div', '', 'agent-model-bar');
+    this.providerSelect = document.createElement('select');
+    this.providerSelect.setAttribute('aria-label', '模型供应商');
+    for (const entry of panel.providers.entries.values()) { const option = text('option', entry.name); option.value = entry.id; this.providerSelect.append(option); }
+    this.providerSelect.value = panel.providers.entries.has(panel.settings.provider) ? panel.settings.provider : 'deepseek';
+    this.modelSelect = document.createElement('select');
+    this.modelSelect.setAttribute('aria-label', '模型');
+    this.modelSelect.className = 'agent-model-select';
+    this.modelConfig = button('⚙', () => panel.configuration()); this.modelConfig.className = 'agent-model-config'; this.modelConfig.title = '模型与 API 配置';
+    const refreshModels = () => {
+      const provider = panel.providers.get(this.providerSelect.value);
+      const current = panel.settings.provider === this.providerSelect.value ? panel.settings.model : null;
+      this.modelSelect.replaceChildren(...(provider?.models ?? []).map(name => { const option = text('option', name); option.value = name; return option; }));
+      if (current && this.modelSelect.querySelector(`option[value="${CSS.escape(current)}"]`)) this.modelSelect.value = current;
+    };
+    refreshModels();
+    this.providerSelect.onchange = async () => {
+      try { await panel.useBuiltinProvider(this.providerSelect.value); refreshModels(); }
+      catch (error) { panel.notify(error.message, 'error'); this.providerSelect.value = panel.settings.provider; }
+    };
+    this.modelSelect.onchange = () => {
+      panel.settings = { ...panel.settings, provider: this.providerSelect.value, model: this.modelSelect.value };
+      panel.persist(); panel.refreshCapabilities?.(); panel.dialogues.updateStatus();
+    };
+    modelBar.append(text('span', '◇', 'agent-model-icon'), this.providerSelect, this.modelSelect, this.modelConfig);
+    panel.refreshModelBar = () => {
+      this.providerSelect.value = panel.providers.entries.has(panel.settings.provider) ? panel.settings.provider : 'deepseek';
+      refreshModels();
+      if (this.modelSelect.querySelector(`option[value="${CSS.escape(panel.settings.model)}"]`)) this.modelSelect.value = panel.settings.model;
+      else { const option = text('option', panel.settings.model); option.value = panel.settings.model; this.modelSelect.append(option); this.modelSelect.value = panel.settings.model; }
+    };
     const topbar = text('div', '', 'agent-topbar'); topbar.append(row, heading);
     const context = text('div', '', 'agent-context'); const label = text('label', '');
     this.contextMode = document.createElement('select'); this.contextMode.setAttribute('aria-label', t('agent-dialogues.s36d8981'));
@@ -93,7 +125,7 @@ export class AgentDialogues {
     this.interruptButton = button(t('agent-dialogues.s90de0b5'), () => this.interrupt(panel.input.value)); this.interruptButton.hidden = true; actions.append(panel.status, panel.send, this.interruptButton, panel.stop);
     this.resumeQueue = button(t('agent-dialogues.s39faf0c'), () => { for (const { turn } of this.queued()) { turn.paused = false; this.save(turn); } this.autoQueue = true; this.drain(); }); this.resumeQueue.className = 'agent-queue-resume'; this.resumeQueue.hidden = true;
     this.composer.append(panel.input, actions); this.composer.onsubmit = event => { event.preventDefault(); this.send(panel.input.value); };
-    panel.host.append(topbar, controls, this.background, this.viewport, this.resumeQueue, this.composer);
+    panel.host.append(topbar, modelBar, controls, this.background, this.viewport, this.resumeQueue, this.composer);
   }
   bind(agent) {
     agent.addEventListener('user', event => { if (this.running) { this.running.runId = event.detail.runId; this.running.turn.startedAt = event.detail.startedAt; this.runs.set(event.detail.runId, this.running); } });
@@ -193,6 +225,7 @@ export class AgentDialogues {
     const summary = reasoning.querySelector('summary'); summary.append(text('span', t('agent-dialogues.sa6c1499'), 'agent-reasoning-label')); const preview = text('span', '', 'agent-reasoning-preview'); summary.append(preview); summary.title = t('agent-dialogues.sb6fe7d7');
     const reasoningText = text('div', '', 'agent-content'), content = text('div', '', 'agent-content'); reasoning.append(reasoningText); element.append(reasoning, content); parent.append(element);
     const round = { element, content, reasoning, reasoningText, preview, source: '', thinking: '' };
+    element.insertBefore(this.copyButton(() => content.textContent), content);
     reasoning.addEventListener('toggle', () => { if (reasoning.open) renderAgentMarkdown(reasoningText, round.thinking); }); return round;
   }
   roundMetrics(round, statistics) {
@@ -253,9 +286,30 @@ export class AgentDialogues {
     const parent = this.recordView(record), previous = this.turnViews.get(turn), next = previous?.root.nextSibling;
     previous?.root.remove(); const view = this.turnView(record, turn, parent); if (next?.parentNode === parent) parent.insertBefore(view.root, next); return view;
   }
+  copyButton(getText) {
+    const node = button('⧉', async () => {
+      const value = String(getText() ?? '');
+      if (!value.trim()) { this.panel.notify(t('agent-dialogues.s9b3c7d48'), 'warning'); return; }
+      let copied = false;
+      try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(value); copied = true; } } catch {}
+      if (!copied) {
+        const area = document.createElement('textarea');
+        area.value = value; area.setAttribute('aria-hidden', 'true');
+        area.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;';
+        document.body.append(area); area.select(); area.setSelectionRange(0, value.length);
+        try { copied = document.execCommand('copy'); } catch { copied = false; }
+        area.remove();
+      }
+      this.panel.notify(copied ? t('agent-dialogues.s7e2d5f61') : t('agent-dialogues.s9b3c7d48'), copied ? 'success' : 'warning');
+    });
+    node.className = 'agent-message-copy'; node.title = t('agent-dialogues.s4c9a1b2'); node.setAttribute('aria-label', node.title);
+    return node;
+  }
   message(role, source, className) {
     const node = text('section', '', className), body = text('div', source, 'agent-content agent-message-body'), toggle = button('', () => this.expandMessage(node, body.hidden));
-    toggle.className = 'agent-message-toggle'; toggle.setAttribute('aria-expanded', 'true'); toggle.append(text('span', role, 'agent-message-role'), text('span', '', 'agent-message-preview')); node.append(toggle, body); return node;
+    toggle.className = 'agent-message-toggle'; toggle.setAttribute('aria-expanded', 'true'); toggle.append(text('span', role, 'agent-message-role'), text('span', '', 'agent-message-preview')); node.append(toggle, body);
+    if (className.includes('answer')) node.insertBefore(this.copyButton(() => body.textContent), toggle);
+    return node;
   }
   expandMessage(node, open) {
     const body = node.querySelector('.agent-message-body'), toggle = node.querySelector('.agent-message-toggle'); body.hidden = !open; toggle.setAttribute('aria-expanded', String(open));
@@ -298,7 +352,10 @@ export class AgentDialogues {
     if (!this.usage || !this.panel.agent) return;
     const config = this.panel.settings, record = this.store.current, stored = record.contextUsage;
     const compatible = stored?.signature === agentContextSignature(config, record.context), capabilities = this.panel.capabilities();
-    const policy = agentContextPolicy(config, { ...capabilities, contextWindow: capabilities.source === 'provider' ? capabilities.contextWindow : compatible ? stored.contextWindow : capabilities.contextWindow });
+    // Always derive the policy from the provider's current capabilities. Old
+    // conversations stored a 128K window; reusing it would keep the UI (and
+    // its warning threshold) pinned to the old ~100K limit.
+    const policy = agentContextPolicy(config, capabilities);
     const running = this.running?.record === record && this.panel.agent.busy;
     let usage = running && this.panel.agent.contextUsage ? this.panel.agent.contextUsage : compatible ? agentContextUsage(stored.tokens, policy, stored.estimated) : null;
     if (!usage) {
@@ -375,7 +432,10 @@ export class AgentDialogues {
       const finish = value => { if (done) return; done = true; signal?.removeEventListener('abort', abort); this.panel.waiting.delete(finish); if (card) { card.classList.add('agent-resolved'); card.querySelector('strong').textContent = value === true ? t('agent-dialogues.s4028759') : value?.answer ? t('agent-dialogues.s0d6d4e1') : signal?.aborted ? t('agent-dialogues.s75dddf5') : t('agent-dialogues.s4c7c52c'); for (const node of card.querySelectorAll('button,input,textarea')) node.disabled = true; } resolve(value); };
       const abort = () => finish(false); this.panel.waiting.add(finish); signal?.addEventListener('abort', abort, { once: true }); card = create(finish);
       if (!task) { finish(false); return; }
-      task.view.work.open = true; task.view.workContent.append(card); this.panel.tab.hidden = false;
+      // Do not reveal #ai-tab here either: pending approvals used to unhide it
+      // permanently, which added a fifth tab to the inspector header. The AI
+      // chat is reached from「AI 工具 → 轻量 AI 修改」instead.
+      task.view.work.open = true; task.view.workContent.append(card);
       this.scroll(); if (signal?.aborted) finish(false);
     });
   }

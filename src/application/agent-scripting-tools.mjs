@@ -4,11 +4,12 @@ import { runAgentChartScript } from '../platform/agent-script.mjs';
 import { t } from '../i18n.mjs';
 
 export function registerAgentScriptingTools(commands, editor, { check, prepareChart, script = runAgentChartScript }) {
-  commands.register({ name: 'agent_tools', description: t('agent-scripting-tools.s1172134'), access: 'read', parameters: agentSchema({ query: agentText, names: { type: 'array', items: agentText, maxItems: 30 }, limit: { type: 'integer', minimum: 1, maximum: 30 } }), prepare: args => ({ apply: () => {
+  commands.register({ name: 'agent_tools', description: t('agent-scripting-tools.s1172134'), access: 'read', parameters: agentSchema({ query: agentText, names: { type: 'array', items: agentText, maxItems: 30 }, limit: { type: 'integer', minimum: 1, maximum: 30 } }),   prepare: args => ({ apply: () => {
     const entries = [...commands.entries.values()];
     if (!args.query && !args.names?.length) return { categories: [...new Set(entries.map(entry => entry.name.split('_')[0]))], total: entries.length, hint: t('agent-scripting-tools.sb6ae55f') };
-    const query = (args.query ?? '').toLowerCase();
-    const selected = entries.filter(entry => args.names?.includes(entry.name) || query && (entry.name + ' ' + entry.description).toLowerCase().includes(query));
+    const tokens = (args.query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+    const haystack = entry => (entry.name + ' ' + entry.description + ' ' + (entry.keywords ?? []).join(' ')).toLowerCase();
+    const selected = entries.filter(entry => args.names?.includes(entry.name) || tokens.length && tokens.every(token => haystack(entry).includes(token)));
     return { total: selected.length, commands: selected.slice(0, args.limit ?? 20).map(entry => ({ name: entry.name, description: entry.description, access: entry.access, owner: entry.owner })) };
   } }) });
   commands.register({ name: 'chart_script', description: t('agent-scripting-tools.sa808291'), access: 'edit', parameters: agentSchema({ revision: agentText, source: { type: 'string', maxLength: 200000 }, input: {}, label: agentText, dryRun: { type: 'boolean' }, timeoutMs: { type: 'integer', minimum: 100, maximum: 30000 } }, ['revision', 'source']), prepare: async (args, { signal }) => {

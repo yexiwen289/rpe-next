@@ -58,6 +58,8 @@ import { localeCandidates, preferredLocales, readLocalePreference, writeLocalePr
 import { installDomTranslation } from './dom-i18n.mjs';
 import { chartDisplayName } from '../core/labels.mjs';
 import { showHotkeySettings } from './hotkey-settings.mjs';
+import { mountKnowledgePanel } from './knowledge-panel.mjs';
+import { mountNeteaseSearch } from './netease-search.mjs';
 import { AutoSaveClock } from '../application/autosave.mjs';
 import { ManualSaveQueue } from '../application/manual-save.mjs';
 import { SPECIAL_TRACKS, MAX_BASE_LAYERS } from '../core/editor-display.mjs';
@@ -71,6 +73,8 @@ import { SceneRuntime } from '../core/scene.mjs';
 import { TimelineActivity } from '../core/timeline-activity.mjs';
 import { assetUrl } from '../core/asset-url.mjs';
 import { AudioAnalysis } from './audio-analysis.mjs';
+import { renderChartVisualization } from './chart-visualization.mjs';
+import { renderChartAiTools } from './chart-ai-tools.mjs';
 import { TrajectoryPanel } from './trajectory-panel.mjs';
 import { TextLinesPanel } from './text-lines.mjs';
 import { NoiseFitPanel } from './noise-fit.mjs';
@@ -214,6 +218,8 @@ const audio = new AudioTransport();
 const hitSounds = new HitSounds(audio);
 const preview = new Preview(element('#preview'));
 const realtimePreview = new Preview(element('#realtime-preview'));
+// 试玩模式：命中音由玩家按键判定驱动，故把 HitSounds 注入主预览，供 onJudge 回调播放
+preview.hitSounds = hitSounds;
 const lineInfoScene = new SceneRuntime();
 const timelineActivity = new TimelineActivity();
 const invalidate = () => { dirtyFrame = true; };
@@ -441,13 +447,30 @@ skin.load();
 document.fonts.load('35px RPEGame').then(invalidate);
 const status = message => { element('#status').textContent = message; };
 const notificationTimers = new Set();
+function dismissNotice(item, timer) {
+  item.classList.add('leaving');
+  setTimeout(() => item.remove(), 260);
+  notificationTimers.delete(timer);
+}
 function notify(message, level = 'success', duration = 2800) {
   if (['error', 'warning'].includes(level)) editorSkinSignal(level);
   if (level === 'success' && editorPreferences.successNotifications === false) return;
   const host = element('#notifications'); if (!host) return;
-  const item = document.createElement('div'); item.className = `editor-notification ${level}`; item.textContent = message; host.append(item);
+  // Repeated identical notices (e.g. an auto-save tick or a held-down key)
+  // refresh the existing toast instead of stacking a wall of them.
+  const key = level + '|' + message;
+  const existing = [...host.children].find(node => node.dataset.noticeKey === key && !node.classList.contains('leaving'));
+  if (existing) {
+    clearTimeout(Number(existing.dataset.timerId));
+    notificationTimers.delete(Number(existing.dataset.timerId));
+    const timer = setTimeout(() => dismissNotice(existing, timer), duration);
+    existing.dataset.timerId = String(timer); notificationTimers.add(timer);
+    return;
+  }
+  const item = document.createElement('div'); item.className = `editor-notification ${level}`; item.textContent = message; item.dataset.noticeKey = key; host.append(item);
   requestAnimationFrame(() => item.classList.add('visible'));
-  const timer = setTimeout(() => { item.classList.add('leaving'); setTimeout(() => item.remove(), 260); notificationTimers.delete(timer); }, duration); notificationTimers.add(timer);
+  const timer = setTimeout(() => dismissNotice(item, timer), duration);
+  item.dataset.timerId = String(timer); notificationTimers.add(timer);
 }
 timeline.notify = (message, level = 'warning') => notify(message, level);
 const reportError = error => {
@@ -797,6 +820,8 @@ function persistEditor() {
 }
 
 function activatePane(name) {
+  // AI 工作台是常驻主区，不属于 inspector 的面板切换体系。
+  if (name === 'ai') { invalidate(); return; }
   if (name === 'global-event-properties' && (!globalEvents.active || globalEvents.selection.size !== 1)) name = 'global-events';
   if (name === 'global-events' && !globalEvents.active) { openGlobalEvents(); return; }
   if (name !== 'events' && eventSampler.active) eventSampler.finish(false);
@@ -810,7 +835,10 @@ function activatePane(name) {
   noiseEditor.syncChrome();
   globalEvents.syncChrome();
   for (const panel of document.querySelectorAll('[data-panel]')) panel.hidden = panel.dataset.panel !== name;
-  for (const button of document.querySelectorAll('[data-pane]')) button.classList.toggle('active', button.dataset.pane === name);
+  // The AI chat is a sub-panel, not a fifth tab. Keep 谱面工具 highlighted so
+  // the header stays at four tabs and still provides a way back.
+  const activeTab = name === 'ai' ? 'chart' : name;
+  for (const button of document.querySelectorAll('[data-pane]')) button.classList.toggle('active', button.dataset.pane === activeTab);
   if (globalEvents.active && ['global-events', 'global-event-properties'].includes(name)) globalEvents.render();
   if (name === 'version-control') versionControl?.open().catch(reportError);
   invalidate();
@@ -830,7 +858,6 @@ function openGlobalEvents() {
   renderSession();
 }
 const globalEventsTool = document.createElement('button'); globalEventsTool.id = 'global-events-tool'; globalEventsTool.textContent = t('app.s895a20e'); element('#noise-areas-tool').after(globalEventsTool);
-const aiTool = document.createElement('button'); aiTool.id = 'ai-tool'; aiTool.textContent = t('app.s9efe3ea'); element('#history-panel').before(aiTool);
 globalEventsTool.onclick = openGlobalEvents;
 element('#close-global-events').onclick = () => { globalEvents.close(); renderSession(); };
 element('#noise-areas-tool').addEventListener('click', openNoisePanel);
@@ -851,6 +878,25 @@ element('#multi-line-merge').addEventListener('click', () => session.setMultiLin
 for (const button of document.querySelectorAll('[data-return-chart]')) button.onclick = () => activatePane('chart');
 for (const form of document.querySelectorAll('#properties, #event-properties')) form.addEventListener('submit', event => { event.preventDefault(); document.activeElement?.blur(); });
 for (const button of document.querySelectorAll('[data-icon]')) button.style.setProperty('--icon', `url('${assetUrl(`rpe/Texture/icon/${button.dataset.icon}.png`)}')`);
+// Fullscreen preview: on desktop use the native full-screen window (hides the
+// OS title bar and window controls), otherwise fall back to the DOM Fullscreen
+// API. In both modes the preview covers the entire viewport with no UI at all.
+let previewFullscreen = false;
+let windowFullscreen = false;   // native window state, tracked even when preview is closed
+async function setPreviewFullscreen(active) {
+  const next = Boolean(active);
+  if (previewFullscreen === next) return;
+  previewFullscreen = next;
+  const wrap = element('.preview-wrap');
+  wrap.classList.toggle('preview-fullscreen', next);
+  const bridge = globalThis.rpenWindowFullscreen;
+  try {
+    if (bridge?.set) { await bridge.set(next); windowFullscreen = next; }
+    else if (next) await wrap.requestFullscreen?.();
+    else if (document.fullscreenElement) await document.exitFullscreen?.();
+  } catch (error) { reportError(error); }
+  invalidate();
+}
 function togglePreview(force, stay = false, replay = false, { autoplay = true } = {}) {
   const visible = force ?? !preview.visible;
   if (visible) clearNoteSourceToast();
@@ -860,8 +906,24 @@ function togglePreview(force, stay = false, replay = false, { autoplay = true } 
     if (autoplay && (editorPreferences.autoplayView ?? preferences.settings.autoplayView) && !audio.playing && !playback.pending) togglePlayback().catch(reportError);
   }
   if (!visible && preview.visible) playback.seek(stay ? audio.time : previewReturnTime);
+  if (!visible && previewFullscreen) void setPreviewFullscreen(false);
   preview.visible = visible;
   element('.preview-wrap').hidden = !preview.visible;
+  // 播放预览现在位于「预览」全幅视图内：任何入口显示画面时都自动展开该视图。
+  if (visible) {
+    const ws = document.querySelector('.workspace');
+    ws?.classList.remove('edit-open');
+    ws?.classList.add('preview-open');
+    document.querySelector('#rail-edit')?.setAttribute('aria-expanded', 'false');
+    document.querySelector('#rail-preview')?.setAttribute('aria-expanded', 'true');
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  }
+  // Opening the preview while the window is already full-screen (F11 first)
+  // must adopt fullscreen mode instead of showing a small preview inside it.
+  if (visible && windowFullscreen && !previewFullscreen) {
+    previewFullscreen = true;
+    element('.preview-wrap').classList.add('preview-fullscreen');
+  }
   element('#view-toggle').classList.toggle('active', preview.visible);
   globalEvents.syncChrome();
   element('#multi-line-labels').hidden = preview.visible;
@@ -872,8 +934,15 @@ function togglePreview(force, stay = false, replay = false, { autoplay = true } 
 }
 
 function listen(selector, callback) {
-  element(selector).addEventListener('click', async () => {
-    try { await callback(); } catch (error) { reportError(error); }
+  const node = element(selector);
+  node.addEventListener('click', async event => {
+    // Single guard for every tool button: an in-flight async action must not be
+    // started twice by a fast double click, and it needs visible feedback.
+    if (node.dataset.busy === '1' || node.disabled) return;
+    node.dataset.busy = '1'; node.classList.add('is-busy');
+    try { await callback(event); }
+    catch (error) { reportError(error); }
+    finally { delete node.dataset.busy; node.classList.remove('is-busy'); }
   });
 }
 
@@ -1185,6 +1254,10 @@ async function loadMusic(bytes, name, updateMetadata = true, recordHistory = tru
     else session.replaceMusicResource(name);
   }
   playback.seek(chartPosition + offsetSeconds());
+  // 后台预分析全曲 DDC：AI 随后可按拍段直接调取，省去主动跑模型的时间。
+  if (globalThis.rpenAudioOnsets && typeof audioOnsets?.preanalyze === 'function') {
+    audioOnsets.preanalyze(audio.buffer).catch(error => notify(t('app.sPreanalyzeFail', { p0: error.message }) ?? `全曲预分析失败：${error.message}`, 'warning'));
+  }
   return true;
 }
 
@@ -1280,6 +1353,63 @@ listen('#home-new', () => element('#new').click());
 listen('#home-open', () => element('#open').click());
 listen('#home-migrate', () => element('#migrate').click());
 listen('#resume-editor', () => setHome(false));
+// --- AI-first workspace: 两个侧边栏各占一条按钮，点击展开抽屉 ---
+const workspaceEl = element('.workspace');
+const drawerMeta = {
+  preview: { cls: 'preview-open', rail: '#rail-preview' },
+  edit: { cls: 'edit-open', rail: '#rail-edit' },
+};
+function setDrawer(which, open) {
+  const meta = drawerMeta[which]; if (!meta) return;
+  // 两个边栏互斥：始终只展开一个，保证 AI 工作台始终是主视觉。
+  if (open) {
+    for (const [other, otherMeta] of Object.entries(drawerMeta)) {
+      if (other === which) continue;
+      workspaceEl.classList.remove(otherMeta.cls);
+      element(otherMeta.rail)?.setAttribute('aria-expanded', 'false');
+    }
+  }
+  workspaceEl.classList.toggle(meta.cls, open);
+  element(meta.rail)?.setAttribute('aria-expanded', String(open));
+  if (which === 'preview') {
+    if (open && !preview.visible) togglePreview(true);
+    else if (!open && preview.visible) togglePreview(false, true);
+  }
+  if (which === 'edit' && open) setChartView(false);
+  requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+}
+// 「手动编辑/属性」界面右侧的内嵌边栏：展开后显示原来的谱面编辑预览 (.editor)
+function setChartView(open) {
+  workspaceEl.classList.toggle('chart-open', open);
+  element('#rail-chart')?.setAttribute('aria-expanded', String(open));
+  requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+}
+for (const which of Object.keys(drawerMeta)) {
+  listen(drawerMeta[which].rail, () => setDrawer(which, !workspaceEl.classList.contains(drawerMeta[which].cls)));
+}
+function closeAllDrawers() {
+  for (const meta of Object.values(drawerMeta)) {
+    workspaceEl.classList.remove(meta.cls);
+    element(meta.rail)?.setAttribute('aria-expanded', 'false');
+  }
+  setChartView(false);
+  if (preview.visible) togglePreview(false, true);
+  requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+}
+for (const button of document.querySelectorAll('[data-close-drawer]')) {
+  button.onclick = () => button.classList.contains('drawer-back')
+    ? closeAllDrawers()
+    : setDrawer(button.dataset.closeDrawer, false);
+}
+listen('#home-ai-create', () => element('#home-new').click());
+listen('#home-ai-open', () => element('#home-open').click());
+element('#ai-tools-tool')?.addEventListener('click', () => setDrawer('edit', true));
+// 走带栏试玩入口：展开播放预览视图（视图打开时会自动进入播放预览）。
+element('#play-judge')?.addEventListener('click', () => setDrawer('preview', true));
+// 「手动编辑/属性」界面右侧的内嵌边栏，以及播放预览待机卡片。
+listen('#rail-chart', () => setChartView(!workspaceEl.classList.contains('chart-open')));
+listen('#chart-back', () => setChartView(false));
+listen('#preview-start', () => setDrawer('preview', true));
 listen('#open', () => { element('#file-input').click(); });
 element('#file-input').addEventListener('change', async event => {
   try {
@@ -1301,8 +1431,43 @@ element('#file-input').addEventListener('change', async event => {
 });
 listen('#save', () => save());
 listen('#export', () => { noiseEditor.flush(); showExportDialog(session.chart, assets, chartName, (name, format) => { status(t('app.s94b8e7e', { p0: name })); if (format === 'pez') { noteExternalBackup(); storagePanel.refresh().catch(() => {}); } }, libraryProject?.identifier ?? libraryProject?.info?.Path, fileOptions()); });
-listen('#view-toggle', () => togglePreview());
-listen('#close-preview', () => togglePreview(false, true));
+listen('#view-toggle', () => {
+  if (preview.visible) { togglePreview(false, true); setDrawer('preview', false); }
+  else setDrawer('preview', true);
+});
+listen('#close-preview', () => { togglePreview(false, true); setDrawer('preview', false); });
+listen('#fullscreen-preview', () => setPreviewFullscreen(true));
+// Keep the UI in sync when the user presses F11 or the OS leaves full-screen.
+globalThis.rpenWindowFullscreen?.onState?.(state => {
+  windowFullscreen = Boolean(state);
+  if (previewFullscreen === windowFullscreen || !preview.visible) return;
+  previewFullscreen = windowFullscreen;
+  element('.preview-wrap').classList.toggle('preview-fullscreen', previewFullscreen);
+  invalidate();
+});
+// The app may start with the window already full-screen.
+globalThis.rpenWindowFullscreen?.get?.().then(state => {
+  windowFullscreen = Boolean(state);
+  if (preview.visible && windowFullscreen && !previewFullscreen) {
+    previewFullscreen = true;
+    element('.preview-wrap').classList.add('preview-fullscreen');
+    invalidate();
+  }
+}).catch(() => {});
+// No visible controls in fullscreen: double-click the canvas to leave.
+element('.preview-wrap').addEventListener('dblclick', () => {
+  if (previewFullscreen) void setPreviewFullscreen(false);
+});
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement && previewFullscreen && !globalThis.rpenWindowFullscreen) void setPreviewFullscreen(false);
+});
+// Esc exits fullscreen only; it must not also close the preview (existing Esc
+// shortcut) while the fullscreen preview is active.
+window.addEventListener('keydown', event => {
+  if (!previewFullscreen || event.repeat || event.key !== 'Escape') return;
+  event.preventDefault(); event.stopImmediatePropagation();
+  void setPreviewFullscreen(false);
+}, true);
 listen('#background', () => element('#background-input').click());
 element('#background-input').addEventListener('change', async event => {
   try {
@@ -1343,6 +1508,52 @@ listen('#recover', async () => {
     }); });
 });
 listen('#play', togglePlayback);
+
+// ---- 试玩模式：播放时按任意键判定 ----
+let playJudgeEnabled = false;
+const playJudgeKeys = new Set();
+function setPlayJudge(enabled) {
+  playJudgeEnabled = Boolean(enabled);
+  playJudgeKeys.clear();
+  for (const instance of [preview, realtimePreview]) instance.setPlayMode(playJudgeEnabled, session.chart, tempo);
+  element('#play-judge')?.setAttribute('aria-pressed', String(playJudgeEnabled));
+  element('#play-judge')?.classList.toggle('active', playJudgeEnabled);
+  if (!playJudgeEnabled) for (const instance of [preview, realtimePreview]) instance.resetJudge(null, null);
+  invalidate();
+}
+listen('#play-judge', () => {
+  if (!hasDocument) return;
+  setPlayJudge(!playJudgeEnabled);
+});
+// 试玩模式下任意键都参与判定；仅在播放时生效
+window.addEventListener('keydown', event => {
+  if (!playJudgeEnabled || mods?.runtime.locks.size || atHome || !hasDocument || !audio.playing) return;
+  if (dialogOpen() || usesNativeTextShortcut(event) || isTextEntry(event.target) || event.isComposing) return;
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  const key = event.code || event.key;
+  if (!key || playJudgeKeys.has(key)) return;
+  playJudgeKeys.add(key);
+  const seconds = chartSeconds();
+  for (const instance of [preview, realtimePreview]) instance.pressJudgeKey(seconds, key);
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}, true);
+window.addEventListener('keyup', event => {
+  if (!playJudgeEnabled) return;
+  const key = event.code || event.key;
+  if (!key || !playJudgeKeys.has(key)) return;
+  playJudgeKeys.delete(key);
+  const seconds = chartSeconds();
+  for (const instance of [preview, realtimePreview]) instance.releaseJudgeKey(seconds, key);
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}, true);
+window.addEventListener('blur', () => {
+  for (const key of [...playJudgeKeys]) {
+    playJudgeKeys.delete(key);
+    for (const instance of [preview, realtimePreview]) instance.releaseJudgeKey(chartSeconds(), key);
+  }
+});
 listen('#rewind', () => seekBeat(0));
 listen('#seek', () => seekBeat(beatValue(parseBeat(element('#seek-beat').value))));
 element('#scrubber').addEventListener('input', event => playback.seek(Number(event.target.value)));
@@ -1537,6 +1748,15 @@ listen('#assets', () => { activatePane('assets'); assetLibrary.render(); });
 listen('#audio-analysis-tool', () => {
   activatePane('audio-analysis'); audioAnalysis.render(element('#audio-analysis-panel')); audioAnalysis.draw(offsetSeconds());
 });
+listen('#visualization-tool', () => {
+  activatePane('visualization'); renderChartVisualization(element('#visualization-panel'), { chart: session.chart, tempo, audio, agent: agentPanel });
+});
+const openAiTools = () => {
+  activatePane('ai-tools'); renderChartAiTools(element('#ai-tools-panel'), { chart: session.chart, tempo, audio, agent: agentPanel });
+};
+listen('#ai-tools-tool', openAiTools);
+// The AI chat is a sub-panel with no top-level tab, so it needs its own way back.
+listen('#ai-return-tools', openAiTools);
 function renderHistoryPanel() {
   const host = element('#history-results'); if (!host) return;
   host.replaceChildren();
@@ -1702,6 +1922,41 @@ listen('#curve-generate', () => {
 });
 listen('#curve-cancel', closeCurvePanel);
 listen('#help', () => showDialog(t('app.s066b024'), HELP_TEXT));
+// 知识库面板：界面内查看 / 修改 / 保存协议与本地增量知识库
+const knowledgeHost = element('#knowledge-panel-host');
+let knowledgePanel;
+listen('#knowledge-open', () => {
+  if (!knowledgePanel) knowledgePanel = mountKnowledgePanel({ host: knowledgeHost, workspace: agentPanel?.workspace, notify });
+  knowledgePanel.setVisible(true);
+});
+
+// 网易云一键流水线：搜索 → 拉取封面+音乐 → 新建谱面 → DDC 全曲预分析 → 进入 AI 工作台
+mountNeteaseSearch({
+  host: element('#netease-host'),
+  onPick: async ({ song, audioBytes, coverBytes, coverName, audioName }) => {
+    try {
+      const apply = async () => {
+        const chart = createChart();
+        chart.META = {
+          ...chart.META,
+          name: song?.name || String(audioName || '').replace(/\.[^.]+$/, '') || '网易云谱面',
+          composer: song?.artist || '',
+          song: audioName,
+          background: coverBytes ? coverName : chart.META.background,
+        };
+        const nextAssets = new Map();
+        nextAssets.set(audioName, audioBytes);
+        if (coverBytes) nextAssets.set(coverName, coverBytes);
+        replaceChart(chart, chart.META.name, nextAssets);
+        const ok = await loadMusic(audioBytes, audioName, false, false);
+        if (!ok) throw Error('音乐载入失败');
+        status(`已从网易云导入《${song?.name ?? audioName}》，DDC 全曲分析在后台进行，可直接向 AI 提要求。`);
+      };
+      if (hasDocument && (session.history.dirty || assetDirty)) confirmAction(t('app.s13472be'), () => apply().catch(reportError));
+      else await apply();
+    } catch (error) { reportError(error); }
+  },
+});
 
 let playbackSpaceHeld = false;
 let lineSwitchDigits = 0;
@@ -1894,7 +2149,8 @@ function frame(timestamp) {
   }
   if (audio.playing && !mods?.runtime.locks.size && loop && currentBeat() >= loop.end) seekBeat(loop.start, false);
   if (audio.playing && audio.time >= audio.duration) { audio.pause(); invalidate(); }
-  hitSounds.tick(session.chart, tempo, session.lineIndex);
+  // 试玩模式下不自动播放命中音（避免“自动游玩”观感）；命中音改由玩家按键判定时触发
+  if (!playJudgeEnabled) hitSounds.tick(session.chart, tempo, session.lineIndex);
   if (!atHome && (audio.playing || dirtyFrame || eventSampler.looping || trajectoryPanel.active || noiseTrackingPanel.active && noiseTrackingPanel.animating || noiseFitPanel.active && noiseFitPanel.options.animate && noiseFitPanel.options.show && noiseFitPanel.previewChart && !noiseFitPanel.fullPreview) && frameLimiter.shouldRender(timestamp, editorPreferences.fpsLimit ?? preferences.settings.fpsLimit)) {
     frameSampleCount++;
     const start = performance.now();

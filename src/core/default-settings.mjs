@@ -58,7 +58,7 @@ export const DEFAULT_EDITOR_PREFERENCES = Object.freeze({
 });
 
 export const DEFAULT_APPEARANCE = Object.freeze({
-  "editorSkin": "inkline",
+  "editorSkin": "default",
   "editorSkinOptions": {
     "inkline": {
       "variant": "base",

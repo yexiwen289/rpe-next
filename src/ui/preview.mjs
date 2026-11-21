@@ -3,6 +3,7 @@ import { prepareCanvas, NOTE_COLORS } from './timeline.mjs';
 import { DEFAULT_LINE_WIDTH, DEFAULT_LINE_HEIGHT, HIT_DURATION, hitFrame } from '../core/visual-constants.mjs';
 import { previewViewport, previewPositionScale, previewNotePosition, simultaneousNotes, hitParticles, overflowTextureSize } from '../core/editor-display.mjs';
 import { renderPasses } from '../core/game-ui.mjs';
+import { createJudgeState, pressJudge, releaseJudge, updateJudge, judgeSummary } from '../core/play-judgement.mjs';
 import { drawGameUi } from './game-ui.mjs';
 import { recentHits } from '../core/hit-effects.mjs';
 import { lineGuides, mergeGuides, pickGuide, formatLineNumbers } from '../core/preview-guides.mjs';
@@ -21,6 +22,11 @@ export class Preview {
     this.backgroundFrame = new PreviewBackground();
     this.noisePreview = new NoisePreview();
     this.allLines = true; this.visible = false; this.noteSize = 175; this.lineScale = 1.5; this.backgroundAlpha = 0.35; this.backgroundBlur = 10.5; this.effectsSince = Infinity; this.applyShaders = true; this.opacity = 1; this.showHitEffects = true;
+    this.playMode = false;          // 试玩模式：键盘任意键判定
+    this.judge = null;              // 判定状态
+    this.judgeIndex = new Map();    // "lineIndex:noteIndex" -> 判定条目
+    this.judgeFx = [];              // 玩家实际按键判定产生的命中特效队列
+    this.hitSounds = null;          // 由 app 注入的 HitSounds 实例（试玩音效）
     this.noteHitAreas = [];
     this.viewportOverflow = DEFAULT_EDITOR_PREFERENCES.viewportOverflow;
     this.overflowBlur = DEFAULT_EDITOR_PREFERENCES.overflowBlur;
@@ -37,8 +43,65 @@ export class Preview {
     }
   }
 
+  /** 开启/关闭试玩模式。 */
+  setPlayMode(enabled, chart, tempo) {
+    this.playMode = Boolean(enabled);
+    this.resetJudge(chart, tempo);
+    return this.playMode;
+  }
+
+  /** 重建判定状态（谱面或播放位置变化时调用）。 */
+  resetJudge(chart, tempo) {
+    this.judgeFx = [];
+    if (!this.playMode || !chart || !tempo) { this.judge = null; this.judgeIndex = new Map(); return null; }
+    this.judge = createJudgeState(chart, tempo, undefined, {
+      // 仅在玩家实际按键判定（complete）时回调：记录特效 + 播打击音效。
+      // 注意：complete 只在 pressJudge / updateJudge(按住判定) / releaseJudge 中调用，
+      // 全部由键盘输入驱动，因此不会自动爆。
+      onJudge: (entry, judgement, at) => {
+        this.judgeFx.push({ lineIndex: entry.lineIndex, noteIndex: entry.noteIndex, note: entry.note, time: at, judgement });
+        this.hitSounds?.playJudgeHit(entry, 0);
+      },
+    });
+    this.judgeIndex = new Map(this.judge.notes.map(entry => [entry.id, entry]));
+    return this.judge;
+  }
+
+  /** 按下任意键：判定窗口内的音符，Drag 由按住状态补判。 */
+  pressJudgeKey(seconds, key) {
+    if (!this.playMode || !this.judge) return 0;
+    this.judge.held.add(key);
+    let judged = pressJudge(this.judge, seconds, key) ?? 0;
+    judged += updateJudge(this.judge, seconds) ?? 0;
+    return judged;
+  }
+
+  /** 松开按键：持有的 Hold 到尾完成，中途松手断连。 */
+  releaseJudgeKey(seconds, key) {
+    if (!this.playMode || !this.judge) return 0;
+    return releaseJudge(this.judge, seconds, key) ?? 0;
+  }
+
+  /** 推进判定时间（自动 Miss、Drag 按住补判、Hold 自动完成）。 */
+  tickJudge(seconds) {
+    if (!this.playMode || !this.judge) return 0;
+    return updateJudge(this.judge, seconds) ?? 0;
+  }
+
+  /** 试玩结算数据。 */
+  judgeScore() {
+    return this.judge ? judgeSummary(this.judge) : null;
+  }
+
   draw(chart, tempo, seconds, selectedLine) {
     if (!this.visible) return;
+    // 播放位置跳变（seek / 循环）后重建判定，避免跳过的音符仍挂在 pending
+    if (this.playMode && this.judge && (this.lastJudgeSeconds === undefined
+        || seconds < this.lastJudgeSeconds - 0.05 || seconds > this.lastJudgeSeconds + 1.5)) {
+      this.resetJudge(chart, tempo);
+    }
+    this.lastJudgeSeconds = seconds;
+    this.tickJudge(seconds);
     const rectangle = this.canvas.getBoundingClientRect();
     if (!(rectangle.width > 0 && rectangle.height > 0)) {
       // A live preview may be temporarily stashed or hidden by a mod. Keep its backing
@@ -55,6 +118,7 @@ export class Preview {
     this.chart = chart;
     if (this.scene.chart !== chart || this.scene.tempo !== tempo) {
       this.scene.compile(chart, tempo); this.simultaneous = simultaneousNotes(chart, tempo);
+      this.resetJudge(chart, tempo);
       this.completionTimes = this.scene.lines.flatMap(runtime => runtime.notes.filter(entry => !entry.note.isFake).map(entry => entry.note.type === 2 ? entry.end : entry.start)).sort((left, right) => left - right);
       this.passes = renderPasses(chart.judgeLineList, this.scene.order);
       this.shaderRuntime.compile(chart, tempo);
@@ -305,7 +369,7 @@ export class Preview {
   }
 
   drawUi(context, chart, tempo, seconds, selectedLine, { viewport, scale, states }) {
-    drawGameUi(context, chart, states, this.completionTimes, seconds, selectedLine, viewport, scale, this.skin, this.duration ?? 600);
+    drawGameUi(context, chart, states, this.completionTimes, seconds, selectedLine, viewport, scale, this.skin, this.duration ?? 600, this.playMode ? this.judgeScore() : null);
   }
 
   // Independent world pass, allowing optional modules to project it before screen effects and UI.
@@ -394,30 +458,63 @@ export class Preview {
       context.restore();
     }
     if (this.showHitEffects) {
+      const lifetime = this.skin?.hitLifetime ?? Math.max(HIT_DURATION, 2 / 3);
       const hitStates = new Map();
-      for (const index of order) {
-        const runtime = this.scene.lines[index];
-        if (!runtime) continue;
-        for (const hit of recentHits(runtime, seconds, this.effectsSince, this.skin?.hitLifetime ?? Math.max(HIT_DURATION, 2 / 3))) {
-          const { entry, time, seed } = hit;
-          if (!hitStates.has(time)) hitStates.set(time, this.scene.sampler(time, positionScale));
-          const state = hitStates.get(time)(index);
-          const position = previewNotePosition(runtime.noteState(entry, state, time), runtime.line, positionScale);
+      if (this.playMode) {
+        // 试玩模式：仅播放玩家实际按键判定的命中特效，绝不自动爆。
+        // 渲染代码与预览（自动游玩）完全一致，观感一模一样。
+        this.judgeFx = (this.judgeFx ?? []).filter(fx => fx.time >= seconds - lifetime - 0.2);
+        for (const fx of this.judgeFx) {
+          if (fx.time < seconds - lifetime || fx.time > seconds) continue;
+          const runtime = this.scene.lines[fx.lineIndex];
+          if (!runtime) continue;
+          // 复用场景运行时里完整的 note entry（含 floor/tail），否则 noteState 会得到 NaN 坐标被裁掉
+          const entry = runtime.notes?.[fx.noteIndex];
+          if (!entry) continue;
+          if (!hitStates.has(fx.time)) hitStates.set(fx.time, this.scene.sampler(fx.time, positionScale));
+          const state = hitStates.get(fx.time)(fx.lineIndex);
+          const position = previewNotePosition(runtime.noteState(entry, state, fx.time), runtime.line, positionScale);
           const angle = state.rotation * Math.PI / 180;
           const horizontal = originX + (state.x + position.x * Math.cos(angle) + position.y * Math.sin(angle)) * scale;
           const vertical = originY + (-state.y + position.x * Math.sin(angle) - position.y * Math.cos(angle)) * scale;
           const size = this.noteSize * 1.4 * scale;
           if (cullNotes && (horizontal + size * 2 < viewport.left || horizontal - size * 2 > viewport.left + viewport.width || vertical + size * 2 < viewport.top || vertical - size * 2 > viewport.top + viewport.height)) continue;
-          if (this.skin?.drawHit?.(context, { age: seconds-time, x: horizontal, y: vertical, size, rotation: angle, color:entry.note.tintHitEffects, seed:index*65537+seed })) continue;
-          const frame = hitFrame(seconds - time);
-          const picture = frame === null ? null : this.skin?.tinted(`img-${frame}`, entry.note.tintHitEffects ?? [255, 236, 160]);
+          if (this.skin?.drawHit?.(context, { age: seconds - fx.time, x: horizontal, y: vertical, size, rotation: angle, color: fx.note.tintHitEffects, seed: fx.lineIndex * 65537 + fx.noteIndex })) continue;
+          const frame = hitFrame(seconds - fx.time);
+          const picture = frame === null ? null : this.skin?.tinted(`img-${frame}`, fx.note.tintHitEffects ?? [255, 236, 160]);
           if (picture) context.drawImage(picture, horizontal - size / 2, vertical - size / 2, size, size);
-          context.fillStyle = `rgb(${(entry.note.tintHitEffects ?? [255, 236, 160]).join(',')})`;
-          for (const particle of hitParticles(seconds - time, index * 65537 + seed, this.noteSize * scale)) {
+          context.fillStyle = `rgb(${(fx.note.tintHitEffects ?? [255, 236, 160]).join(',')})`;
+          for (const particle of hitParticles(seconds - fx.time, fx.lineIndex * 65537 + fx.noteIndex, this.noteSize * scale)) {
             context.globalAlpha = particle.alpha;
             context.fillRect(horizontal + particle.x - particle.radius, vertical + particle.y - particle.radius, particle.radius * 2, particle.radius * 2);
           }
           context.globalAlpha = 1;
+        }
+      } else {
+        for (const index of order) {
+          const runtime = this.scene.lines[index];
+          if (!runtime) continue;
+          for (const hit of recentHits(runtime, seconds, this.effectsSince, lifetime)) {
+            const { entry, time, seed } = hit;
+            if (!hitStates.has(time)) hitStates.set(time, this.scene.sampler(time, positionScale));
+            const state = hitStates.get(time)(index);
+            const position = previewNotePosition(runtime.noteState(entry, state, time), runtime.line, positionScale);
+            const angle = state.rotation * Math.PI / 180;
+            const horizontal = originX + (state.x + position.x * Math.cos(angle) + position.y * Math.sin(angle)) * scale;
+            const vertical = originY + (-state.y + position.x * Math.sin(angle) - position.y * Math.cos(angle)) * scale;
+            const size = this.noteSize * 1.4 * scale;
+            if (cullNotes && (horizontal + size * 2 < viewport.left || horizontal - size * 2 > viewport.left + viewport.width || vertical + size * 2 < viewport.top || vertical - size * 2 > viewport.top + viewport.height)) continue;
+            if (this.skin?.drawHit?.(context, { age: seconds-time, x: horizontal, y: vertical, size, rotation: angle, color:entry.note.tintHitEffects, seed:index*65537+seed })) continue;
+            const frame = hitFrame(seconds - time);
+            const picture = frame === null ? null : this.skin?.tinted(`img-${frame}`, entry.note.tintHitEffects ?? [255, 236, 160]);
+            if (picture) context.drawImage(picture, horizontal - size / 2, vertical - size / 2, size, size);
+            context.fillStyle = `rgb(${(entry.note.tintHitEffects ?? [255, 236, 160]).join(',')})`;
+            for (const particle of hitParticles(seconds - time, index * 65537 + seed, this.noteSize * scale)) {
+              context.globalAlpha = particle.alpha;
+              context.fillRect(horizontal + particle.x - particle.radius, vertical + particle.y - particle.radius, particle.radius * 2, particle.radius * 2);
+            }
+            context.globalAlpha = 1;
+          }
         }
       }
     }

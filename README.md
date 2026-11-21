@@ -2,9 +2,20 @@
 
 作者：**cmdysj**。本项目是在原 **Re:PhiEdit（RPE）** 项目基础上，使用 **AI（GPT）** 进行的重构，是 Phigros 的非官方制谱器。
 
-[在线使用](https://kclg-ysj.github.io/rpe-next/) · [源码](https://github.com/kclg-YSJ/rpe-next)
+> **关于本分支的二次重构**：本界面与交互由 **yexiwen289** 使用 **WorkBuddy** 在 **cmdysj 上述重构版本的基础上**再次重构而成（暗色主题、AI 工作台为主界面、全幅预览与编辑视图等）。谱面格式、编辑器核心与原项目归属仍归原 **Re:PhiEdit** 与 **cmdysj** 的重构版所有；原作者的署名、版权与许可证保持不变。
+
+[原项目在线使用](https://kclg-ysj.github.io/rpe-next/) · [原项目源码](https://github.com/kclg-YSJ/rpe-next)
 
 当前版本：**0.13.0**。
+
+### AI 功能与 API Key
+
+本分支的 AI 工作台需配置 AI 服务商密钥才能对话。两种方式（任选其一）：
+
+1. 在项目根目录复制 `.env.example` 为 `.env`，填入 `RPE_GLM_API_KEY` / `RPE_SENSENOVA_API_KEY`。`.env` 已被 `.gitignore` 忽略，不会提交。
+2. 或在应用内「设置 → AI 供应商」界面填写（保存在本地偏好，不进源码）。
+
+源码中不含任何 API 密钥；`tools/probe-*.mjs` 等调试脚本也通过 `RPE_GLM_API_KEY` 环境变量读取。
 
 基于 Canvas、Web Audio、WebGL 和 IndexedDB，支持音符与事件编辑、实时预览、着色器、多谱面管理、原 RPE 谱面导入、热键及设置迁移。当前仍在持续完善，尚不保证与原 RPE 完全一致；建议保留原始谱面与资源备份。
 

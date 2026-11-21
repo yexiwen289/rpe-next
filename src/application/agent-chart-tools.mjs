@@ -50,6 +50,7 @@ export const AGENT_CHART_TOOLS = Object.freeze([
   { id: 'multi-line-tool', name: t('agent-chart-tools.s5255093'), commands: ['multi_line', 'chart_query', 'chart_transform'] },
   { id: 'global-events-tool', name: t('agent-chart-tools.s895a20e'), commands: ['global_events'] },
   { id: 'diagnose', name: t('agent-chart-tools.s000a07b'), commands: ['diagnose'] },
+  { id: 'knowledge-tool', name: t('agent-chart-tools.s7b3e5d1'), commands: ['chart_knowledge', 'chart_knowledge_write'] },
   { id: 'history-panel', name: t('agent-chart-tools.s05a196d'), commands: ['history'] },
   { id: 'version-control-tool', name: t('agent-chart-tools.s8414f7a'), commands: ['version_control', 'ui_inspect', 'ui_action'] },
 ]);

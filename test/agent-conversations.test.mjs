@@ -44,8 +44,8 @@ test('编辑/重试分支只复制目标之前的历史，不改变原对话；�
   store.remove(source.id); assert.equal(store.records.size, 1); assert.equal(store.current.turns.length, 0);
 });
 
-test('默认输出65536；Markdown链接不允许脚本与本地文件，提示词包含广义概念分类', () => {
-  assert.equal(DEFAULT_AGENT_SETTINGS.maxTokens, 65536);
+test('默认输出16384；Markdown链接不允许脚本与本地文件，提示词包含广义概念分类', () => {
+  assert.equal(DEFAULT_AGENT_SETTINGS.maxTokens, 16384);
   for (const url of ['javascript:alert(1)', 'data:text/html,test', 'file:///secret', 'relative/path']) assert.equal(agentLink(url), null);
   assert.equal(agentLink('https://example.com/a'), 'https://example.com/a'); assert.ok(DEFAULT_AGENT_PROMPT.includes('工作区状态')); assert.ok(DEFAULT_AGENT_PROMPT.includes('命名实体')); assert.ok(!DEFAULT_AGENT_PROMPT.includes('111'));
 });

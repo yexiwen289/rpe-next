@@ -326,6 +326,31 @@ export class Timeline {
     if (this.drag) {
       const previous = this.drag.current;
       this.drag.current = this.cursor;
+      if (this.drag.kind === 'brush') {
+        const lineIndex = this.drag.lineIndex;
+        const beat = this.snappedBeat(this.cursor.y);
+        const positionX = this.notePositionAt(this.cursor.x, lineIndex);
+        if (Number.isFinite(beat) && Number.isFinite(positionX)) {
+          const addCell = (cellBeat, x) => {
+            const key = `${cellBeat.toFixed(5)}:${Math.round(x)}`;
+            if (this.drag.placed.has(key)) return;
+            this.drag.placed.add(key);
+            this.drag.notes.push(createNote(this.drag.type, cellBeat, x));
+          };
+          const last = this.drag.last, step = 1 / Math.max(1, this.division || 1);
+          // A fast vertical drag skips pointermove frames; fill the grid cells
+          // in between so a single sweep still produces a clean stream.
+          if (last && Math.abs(positionX - last.x) < 1 && Math.abs(beat - last.beat) > step * 1.5) {
+            const direction = Math.sign(beat - last.beat);
+            const count = Math.min(64, Math.round(Math.abs(beat - last.beat) / step));
+            for (let index = 1; index < count; index++) addCell(last.beat + direction * step * index, positionX);
+          }
+          addCell(beat, positionX);
+          this.drag.last = { beat, x: positionX };
+        }
+        this.changed();
+        return;
+      }
       this.drag.currentWorldX = this.cursor.x + this.multiLineViewportOffset(this.notesCanvas.clientWidth, 'notes');
       if (this.drag.startFactor !== undefined) this.drag.currentSeconds = this.tempo.seconds(this.origin, this.drag.startFactor) + (this.viewHeight() - this.judgementOffset - this.drag.current.y) / this.scale;
       if (this.drag.kind === 'multi-pan') {
@@ -378,7 +403,21 @@ export class Timeline {
     const multiMode = session.multiLineActive;
     const multiPanel = multiMode && this.panelCount('notes') > 1;
     const panBlank = multiPanel && !hit && !this.tool && !this.pendingHold;
-    if (event.button === 0 && (this.pendingHold || this.tool && !event.shiftKey && !event.ctrlKey) && !panBlank) { this.addAtCursor(this.pendingHold ? 2 : this.tool); return; }
+    if (event.button === 0 && (this.pendingHold || this.tool && !event.shiftKey && !event.ctrlKey) && !panBlank) {
+      // Hold still needs two clicks. Tap/Flick/Drag become a brush: dragging
+      // lays one note on every new grid cell, committed as a single undo step.
+      if (this.pendingHold || this.tool === 2) { this.addAtCursor(this.pendingHold ? 2 : this.tool); return; }
+      const lineIndex = this.cursorLineIndex ?? session.lineIndex;
+      const cell = this.brushCell(position);
+      this.drag = { kind: 'brush', type: this.tool, lineIndex, start: position, current: position, notes: [], placed: new Set() };
+      if (cell) {
+        this.drag.notes.push(cell.note); this.drag.placed.add(cell.key);
+        this.drag.last = { beat: beatValue(cell.note.startTime), x: cell.note.positionX };
+      }
+      if (this.notesCanvas.style) this.notesCanvas.style.cursor = 'crosshair';
+      this.changed();
+      return;
+    }
     if (multiMode && (event.shiftKey || event.button === 1)) {
       const worldX = position.x + this.multiLineViewportOffset(this.notesCanvas.clientWidth, 'notes');
       this.drag = { kind: 'rectangle', area: 'notes', start: position, startWorldX: worldX, startFactor: this.factorForLine(this.cursorLineIndex ?? session.lineIndex), startSeconds: this.timeAt(position.y), current: position, currentWorldX: worldX, append: true, remove: false };
@@ -413,6 +452,13 @@ export class Timeline {
 
   up(event) {
     if (!this.drag) return;
+    if (this.drag.kind === 'brush') {
+      const drag = this.drag; this.drag = null;
+      if (drag.notes.length) this.getSession().insertNotesAt(drag.lineIndex, drag.notes, t('timeline.sBrushAdd'));
+      if (this.notesCanvas.style) this.notesCanvas.style.cursor = 'default';
+      this.changed();
+      return;
+    }
     if (this.drag.kind === 'stroke') this.move(event);
     if (this.drag.kind === 'multi-pan') { this.drag = null; this.changed(); return; }
     if (this.drag.kind === 'stroke' && !this.drag.remove && !this.drag.tracing && this.previewPick?.(event)) { this.drag = null; this.changed(); return; }
@@ -462,6 +508,18 @@ export class Timeline {
     this.drag = null;
     if (drag.kind === 'stroke' && drag.tracing) session.notify();
     this.changed();
+  }
+
+  // One grid cell = one note while brushing. The key deduplicates cells so a
+  // slow drag never stacks notes on the same beat/X position.
+  brushCell(position) {
+    const session = this.getSession();
+    const lineIndex = this.drag?.kind === 'brush' ? this.drag.lineIndex : (this.cursorLineIndex ?? session.lineIndex);
+    const type = this.drag?.kind === 'brush' ? this.drag.type : this.tool;
+    const beat = this.snappedBeat(position.y);
+    const positionX = this.notePositionAt(position.x, lineIndex);
+    if (!Number.isFinite(beat) || !Number.isFinite(positionX)) return null;
+    return { key: `${beat.toFixed(5)}:${Math.round(positionX)}`, lineIndex, note: createNote(type, beat, positionX) };
   }
 
   addAtCursor(type) {
@@ -653,7 +711,18 @@ export class Timeline {
       context.fillRect(start.x, start.y, current.x - start.x, current.y - start.y);
       context.strokeRect(start.x, start.y, current.x - start.x, current.y - start.y);
     }
-    if (this.pendingHold && this.cursor) {
+    if (this.drag?.kind === 'brush' && this.drag.notes.length) {
+      const lineIndex = this.drag.lineIndex;
+      const width = this.noteBaseWidth({ size: 1 });
+      context.fillStyle = NOTE_COLORS[this.drag.type] + 'aa';
+      context.globalAlpha = 0.8;
+      for (const note of this.drag.notes) {
+        const vertical = this.verticalForLine(beatValue(note.startTime), lineIndex, height);
+        const horizontal = this.noteHorizontal(note.positionX, lineIndex);
+        context.fillRect(horizontal - width / 2, vertical - 3 * this.renderNoteScale, width, 6 * this.renderNoteScale);
+      }
+      context.globalAlpha = 1;
+    } else if (this.pendingHold && this.cursor) {
       const lineIndex = this.pendingHold.lineIndex ?? this.getSession().lineIndex;
       const head = this.verticalForLine(this.pendingHold.beat, lineIndex, height); const tail = this.verticalForLine(this.snappedBeat(this.cursor.y), lineIndex, height);
       const pendingHorizontal = this.noteHorizontal(this.pendingHold.positionX, lineIndex);
@@ -661,7 +730,7 @@ export class Timeline {
       context.globalAlpha = 0.65;
       if (!this.skin?.hold(context, pendingHorizontal, head, tail, width)) context.fillRect(pendingHorizontal - width / 2, Math.min(head, tail), width, Math.abs(tail - head));
       context.globalAlpha = 1;
-    } else if (this.cursor && this.tool) {
+    } else if (this.cursor && this.tool && this.drag?.kind !== 'brush') {
       const lineIndex = this.cursorLineIndex ?? this.lineIndexAt(this.cursor.x, width, 'notes');
       const positionX = this.notePositionAt(this.cursor.x, lineIndex);
       context.fillStyle = NOTE_COLORS[this.tool] + '88';

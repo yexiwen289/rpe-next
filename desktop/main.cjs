@@ -5,6 +5,18 @@ const { resolve, sep } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { NativeService } = require('./native-service.cjs');
 
+// 轻量加载本地 .env（无第三方依赖）：仅注入白名单密钥，已被 .gitignore 忽略。
+{
+  const envPath = resolve(__dirname, '..', '.env');
+  try {
+    const raw = require('node:fs').readFileSync(envPath, 'utf8');
+    for (const line of raw.split(/\r?\n/)) {
+      const match = /^\s*(RPE_GLM_API_KEY|RPE_SENSENOVA_API_KEY)\s*=\s*(.*?)\s*$/.exec(line);
+      if (match && !process.env[match[1]]) process.env[match[1]] = match[2].replace(/^["']|["']$/g, '');
+    }
+  } catch { /* 无 .env 时保持空，用户可在设置界面填 */ }
+}
+
 const origin = 'rpe://app';
 const smokeSettings = process.argv.includes('--smoke-settings');
 const smokeMedia = process.argv.includes('--smoke-media');
@@ -68,6 +80,11 @@ else {
     audioStorage.attach('mapper', audioMapper); if (!audioStorage.error) await audioMapper.initialize();
     installAudioMapper({ ipcMain, service: audioMapper, origin, window: () => mainWindow, dialog });
     app.on('before-quit', () => audioMapper.close());
+    // 网易云音乐搜索 / 封面与音乐下载（主进程 net.fetch 代理，规避渲染进程 CSP 限制）
+    try {
+      const { installNetease } = require('./netease.cjs');
+      installNetease({ ipcMain, net, origin, window: () => mainWindow });
+    } catch (error) { console.error('[netease] install failed:', error.message); }
     const { AgentCredentialVault, installAgentCredentials } = await import(pathToFileURL(resolve(__dirname, 'agent-credentials.mjs')).href);
     const agentCredentials = new AgentCredentialVault(resolve(app.getPath('userData'), 'agent-credentials.json'), { safeStorage, writeJson: atomicJson });
     installAgentCredentials({ ipcMain, vault: agentCredentials, origin, window: () => mainWindow });
@@ -169,6 +186,17 @@ else {
       webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: resolve(__dirname, 'preload.cjs'), spellcheck: false, backgroundThrottling: !smoke }
     });
     mainWindow.removeMenu();
+    // True full-screen preview: hide the OS title bar / window controls as well.
+    ipcMain.handle('rpen-window-fullscreen', async (event, request = {}) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return false;
+      const action = request.action ?? 'get';
+      if (action === 'set') mainWindow.setFullScreen(Boolean(request.value));
+      else if (action === 'toggle') mainWindow.setFullScreen(!mainWindow.isFullScreen());
+      return mainWindow.isFullScreen();
+    });
+    for (const [name, state] of [['enter-full-screen', true], ['leave-full-screen', false]]) {
+      mainWindow.on(name, () => { if (!mainWindow.isDestroyed()) mainWindow.webContents.send('rpen-window-fullscreen-state', state); });
+    }
     mainWindow.webContents.on('did-start-loading', cancelAgentNetwork);
     mainWindow.webContents.on('did-start-loading', () => audioSeparation.close());
     mainWindow.webContents.on('did-start-loading', () => audioOnsets.close());

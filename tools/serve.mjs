@@ -8,6 +8,17 @@ import { collaborationConnectSources } from '../src/core/collaboration-policy.mj
 const root = await realpath(fileURLToPath(new URL('../', import.meta.url)));
 const port = Number(process.env.RPE_PORT ?? 4173);
 const connectSources = collaborationConnectSources(process.env.RPE_MEDIA_ORIGINS);
+// 从本地 .env 读取白名单环境变量，仅注入到 index.html 的 meta（不暴露其它变量）。
+const ENV_KEYS = ['RPE_GLM_API_KEY', 'RPE_SENSENOVA_API_KEY'];
+const runtimeEnv = {};
+try {
+  const dotenv = await readFile(resolve(root, '.env'), 'utf8');
+  for (const line of dotenv.split(/\r?\n/)) {
+    const match = /^\s*([\w]+)\s*=\s*(.*?)\s*$/.exec(line);
+    if (match && ENV_KEYS.includes(match[1])) runtimeEnv[match[1]] = match[2].replace(/^["']|["']$/g, '');
+  }
+} catch { /* 无 .env 时保持空 */ }
+for (const key of ENV_KEYS) if (process.env[key]) runtimeEnv[key] = process.env[key];
 const mimeTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.ogg': 'audio/ogg', '.ttf': 'font/ttf', '.json': 'application/json' };
 const server = createServer(async (request, response) => {
   try {
@@ -23,7 +34,12 @@ const server = createServer(async (request, response) => {
     }
     const path = await realpath(resolve(root, relative));
     if (!path.startsWith(root + sep)) throw new Error('Unavailable');
-    const content = await readFile(path);
+    let content = await readFile(path);
+    if (relative === 'index.html' && ENV_KEYS.some(key => runtimeEnv[key])) {
+      const tags = ENV_KEYS.filter(key => runtimeEnv[key]).map(key =>
+        `<meta name="rpe-env" data-key="${key}" content="${String(runtimeEnv[key]).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">`).join('');
+      content = Buffer.from(String(content).replace('</head>', tags + '</head>'));
+    }
     response.writeHead(200, { 'Content-Type': mimeTypes[extname(path)] ?? 'application/octet-stream', 'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': `default-src 'self'; script-src 'self' blob:; script-src-elem 'self' blob: 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' blob:; media-src blob: data:; connect-src ${connectSources}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'` });
     response.end(request.method === 'HEAD' ? undefined : content);

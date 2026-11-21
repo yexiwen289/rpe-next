@@ -3,8 +3,9 @@
   "version": "0.13.0",
   "private": true,
   "type": "module",
-  "description": "Independent, incremental Re:PhiEdit reconstruction",
+  "description": "Re:PhiEdit Next - rebuilt with WorkBuddy on top of cmdysj's AI (GPT) reconstruction of the original RPE",
   "author": "cmdysj",
+  "contributors": ["yexiwen289 (WorkBuddy rebuild)"],
   "license": "PolyForm-Noncommercial-1.0.0",
   "homepage": "https://kclg-ysj.github.io/rpe-next/",
   "repository": {

@@ -2060,6 +2060,12 @@
       }
     },
     {
+      "selector": "#clipboard-history",
+      "set": {
+        "grid-column": "1 / -1"
+      }
+    },
+    {
       "selector": "@chart-tools .skin-control-group",
       "set": {
         "display": "contents"
@@ -3768,7 +3774,6 @@
         "diagnose",
         "history-panel",
         "version-control-tool",
-        "ai-tool",
         "collaboration-tool"
       ]
     }

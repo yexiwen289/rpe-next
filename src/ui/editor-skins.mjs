@@ -46,7 +46,9 @@ export class EditorSkins {
       this.persistOptions();
       this.updateOptions();
       const requestedDefault = new URL(location.href).searchParams.get('skin') === 'default';
-      const id = requestedDefault ? 'default' : localPreferences.getItem(ACTIVE_KEY) ?? DEFAULT_APPEARANCE.editorSkin;
+      const stored = localPreferences.getItem(ACTIVE_KEY);
+      // 默认皮肤改为「无（default）」，沿用 styles.css 的视觉；历史持久化的 inkline 一并迁回 default。
+      const id = requestedDefault ? 'default' : (stored === 'inkline' ? 'default' : stored ?? DEFAULT_APPEARANCE.editorSkin);
       if (id !== 'default' && this.records.has(id)) await this.use(id);
       else if (id !== 'default') { const message = t('editor-skins.s5c27763', { p0: id }); this.message.textContent = message; this.notify(message, 'warning'); localPreferences.setItem(ACTIVE_KEY, 'default'); }
     } catch (error) { this.message.textContent = t('editor-skins.sfa59f76') + error.message; this.notify(this.message.textContent, 'warning'); }

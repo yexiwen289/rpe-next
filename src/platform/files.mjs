@@ -1,4 +1,4 @@
-import { serializeChart, stringifyPreservingNumbers, EVENT_TYPES, EXTENDED_TYPES } from '../core/chart.mjs';
+import { serializeChart, stringifyPreservingNumbers, EVENT_TYPES, EXTENDED_TYPES, createEvent } from '../core/chart.mjs';
 import { parseDocument } from '../core/formats.mjs';
 import { readZip, writeZip, crc32, inspectZip } from './archive.mjs';
 import { decodeLegacy, parseInfo } from './legacy-text.mjs';
@@ -13,6 +13,17 @@ import { isBackupChartFile, isChartDocumentFile } from '../core/chart-backups.mj
 import { collectExportAssetPaths } from './export-assets.mjs';
 import { bezierExportMargin, clampExportBezierEvent } from '../core/bezier-compat.mjs';
 import { t } from '../i18n.mjs';
+
+// The editor draws the default judge line from this built-in 225-byte texture,
+// so `line.png` is normally absent from project assets. Phira / prpr load the
+// texture from the chart package itself and render no line when it is missing.
+const DEFAULT_LINE_TEXTURE = 'iVBORw0KGgoAAAANSUhEUgAAD6AAAAAFCAYAAABR5hO2AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAAJOgAACToAYJjBRwAAAB2SURBVHhe7dtBDQAwDMSw2/hz3qqqLGp/giLnlQAAAAAAAAAAAAAAAAAAALDenQIAAAAAAAAAAAAAAAAAALCcAR0AAAAAAAAAAAAAAAAAAIBmQAcAAAAAAAAAAAAAAAAAAKAZ0AEAAAAAAAAAAAAAAAAAACjJB8RwBAbT2sM8AAAAAElFTkSuQmCC';
+export function defaultLineTexture() {
+  const binary = atob(DEFAULT_LINE_TEXTURE);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
 
 export async function openFiles(fileList, { confirmLargeArchive, includeBackupCharts = false } = {}) {
   const files = [...fileList];
@@ -147,6 +158,21 @@ export function legacyChart(chart, splitSettings = {}, compatibility = {}) {
       for (const event of trajectories) for (const [type, fragments] of expandTrajectory(event, tempo, line.bpmfactor ?? 1, splitSettings)) layer[type] = [...(layer[type] ?? []), ...fragments].sort((left, right) => beatValue(left.startTime) - beatValue(right.startTime));
     }
   }
+  // Phira / prpr expect every basic event track to exist, parse an empty
+  // `extended` poorly, and treat a judge line without a positive alpha event
+  // as fully transparent. Normalise the exported copy only.
+  for (const line of next.judgeLineList ?? []) {
+    if (!Array.isArray(line.eventLayers) || !line.eventLayers.length) line.eventLayers = [{}];
+    for (const layer of line.eventLayers) {
+      if (!layer || typeof layer !== 'object') continue;
+      for (const type of EVENT_TYPES) if (!Array.isArray(layer[type])) layer[type] = [];
+    }
+    const layers = line.eventLayers.filter(layer => layer && typeof layer === 'object');
+    if (layers.length && !layers.some(layer => (layer.alphaEvents ?? []).some(event => Number(event?.start) > 0 || Number(event?.end) > 0))) {
+      layers[0].alphaEvents = [createEvent(255, 255, 0, 1), ...(layers[0].alphaEvents ?? [])];
+    }
+    line.extended = { ...Object.fromEntries(EXTENDED_TYPES.map(type => [type, []])), ...(line.extended ?? {}) };
+  }
   return orderedExportChart(next, compatibility);
 }
 
@@ -240,6 +266,17 @@ export function packageEntries(chart, assets, chartName, options = {}) {
     while ([...output.keys()].some(name => normalizePath(name) === normalizePath(outputName))) outputName = `${stem}.rpe-${suffix++}.json`;
   }
   output.set(outputName, new TextEncoder().encode(serializeChart(chart, { compact: options.compact !== false })));
+  // RPE-compatible packages are consumed by Phira / prpr, which resolve the
+  // default `line.png` from the package. The editor has it built in, so inject
+  // it when the project itself does not provide one.
+  let injectedLinePath = null;
+  if (options.compatibility === 'rpe') {
+    const directory = outputName.replaceAll('\\', '/').split('/').slice(0, -1).join('/');
+    const candidate = directory ? `${directory}/line.png` : 'line.png';
+    const needsDefault = (chart.judgeLineList ?? []).some(line => !line.Texture || line.Texture === 'line.png');
+    const present = [...output.keys()].some(name => normalizePath(name) === normalizePath(candidate));
+    if (needsDefault && !present) { output.set(candidate, defaultLineTexture()); injectedLinePath = candidate; }
+  }
   const effects = [chart.effects, chart.shaderEvents, chart.META?.effects].filter(Array.isArray).flat();
   for (const [lineIndex, line] of (chart.judgeLineList ?? []).entries()) for (const event of line.extended?.paintEvents ?? []) effects.push(serializeShaderEvent(event, lineIndex));
   effects.sort((left, right) => {
@@ -269,7 +306,7 @@ export function packageEntries(chart, assets, chartName, options = {}) {
     const directory = outputName.replaceAll('\\', '/').split('/').slice(0, -1).join('/');
     const extra = (directory ? directory + '/' : '') + 'extra.json';
     const extraPath = [...output.keys()].find(name => normalizePath(name) === normalizePath(extra));
-    const roots = [outputName, 'info.txt', ...matchingInfo(output, outputName).map(([name]) => name), ...(extraPath ? [extraPath] : [])];
+    const roots = [outputName, 'info.txt', ...(injectedLinePath ? [injectedLinePath] : []), ...matchingInfo(output, outputName).map(([name]) => name), ...(extraPath ? [extraPath] : [])];
     const used = collectExportAssetPaths(chart, output, chartName, { resolve: assetPath, media: resourceReferences(chart, assets, chartName), roots, mainFile: outputName, includeBackupCharts: options.includeBackupCharts });
     for (const name of output.keys()) if (!used.has(name)) output.delete(name);
   }

@@ -15,10 +15,22 @@ export function isTypingText(target) {
   return Boolean(input && ['text', 'search', 'url', 'email', 'password', 'tel'].includes(input.type));
 }
 
+// A plain text selection (for example inside the AI output) must keep the
+// native copy/cut shortcuts, otherwise the editor hotkeys swallow them.
+export function hasTextSelection() {
+  const selection = globalThis.getSelection?.();
+  if (!selection || selection.isCollapsed) return false;
+  return String(selection.toString?.() ?? '').trim().length > 0;
+}
+
 export function usesNativeTextShortcut(event) {
   if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return true;
   if (isTypingText(event.target)) return true;
-  if (!isTextEntry(event.target)) return false;
+  if (!isTextEntry(event.target)) {
+    const key = String(event.key ?? '').toLowerCase();
+    if (hasTextSelection() && (event.ctrlKey || event.metaKey) && (key === 'c' || key === 'x' || key === 'insert')) return true;
+    return false;
+  }
   if (event.target?.closest?.('input')?.type !== 'number') return true;
   if (event.ctrlKey || event.metaKey || event.altKey) return true;
   return /^[0-9eE.,+-]$/.test(event.key) || ['Backspace', 'Delete', 'Insert', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown', 'Tab', 'Enter', 'Escape', 'Dead', 'Process'].includes(event.key);

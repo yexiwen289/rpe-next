@@ -1,5 +1,6 @@
 import { agentSchema, agentNumber, agentText, agentIndex } from '../core/agent-commands.mjs';
 import { agentAt, agentPath, agentBeat, agentChartPatch, agentChartSummary, agentCircle, agentShake, agentTapNotes } from '../core/agent-chart.mjs';
+import { computeChartMetrics, compactChartInsights } from '../core/chart-metrics.mjs';
 import { analyzeAgentAudio, quantizeAgentPeaks } from '../core/agent-audio.mjs';
 import { mapperTiming } from '../core/audio-mapper.mjs';
 import { assertChart, diagnose, createNote, createEvent, createLine } from '../core/chart.mjs';
@@ -9,6 +10,8 @@ import { deleteLine, duplicateLine, ensureLineCount, reorderLine, setLineParent 
 import { TempoMap } from '../core/tempo.mjs';
 import { compileExpression } from '../core/batch-script.mjs';
 import { AgentSourceReader } from '../platform/agent-source.mjs';
+
+import { KNOWLEDGE_CATEGORIES, KNOWLEDGE_DOCUMENT_PATH, KNOWLEDGE_LOCAL_PATH, appendKnowledgeEntry, mergeKnowledgeDocuments, parseKnowledgeDocument, searchKnowledge } from '../core/agent-knowledge.mjs';
 import { registerAgentChartTools } from './agent-chart-tools.mjs';
 import { registerAgentWorkspaceTools } from './agent-workspace-tools.mjs';
 import { registerAgentScriptingTools } from './agent-scripting-tools.mjs';
@@ -34,8 +37,44 @@ export function createAgentEditorCommands(commands, editor, { controls, network,
     return { summary, access: dangerous ? 'dangerous' : 'edit', details: { before: agentChartSummary(chart), after: agentChartSummary(next), ...result }, valid: () => editor.session === session && editor.chart === chart,
       apply: () => { editor.commit('AI · ' + summary, next); if (editor.chart === chart) throw Error(t('agent-editor.s02c0013')); return { ...result, revision: revision(editor.chart), undoable: true }; } };
   };
-  const register = (name, description, parameters, access, prepare) => commands.register({ name, description, parameters, access, prepare });
+  const register = (name, description, parameters, access, prepare, keywords) => commands.register({ name, description, parameters, access, prepare, keywords });
   register('editor_source', t('agent-editor.s8fa3b92'), agentSchema({ action: enumeration(['list', 'search', 'read']), path: agentText, query: { type: 'string', maxLength: 200 }, offset: agentIndex, limit: integer(1, 100), startLine: integer(1, Number.MAX_SAFE_INTEGER), startColumn: integer(1, Number.MAX_SAFE_INTEGER), lineCount: integer(1, 200), caseSensitive: { type: 'boolean' } }), 'read', (args, { signal }) => ({ apply: () => source.query(args, signal) }));
+  // 读取随谱面工作区保存的本地增量知识库（knowledge.local.md）。
+  // 桌面端经 IPC 落盘、网页端走 IndexedDB，二者都是同一个 AgentWorkspace 抽象。
+  const readLocalKnowledgeText = async signal => {
+    if (!workspace) return '';
+    try {
+      const stat = await workspace.call('stat', { path: KNOWLEDGE_LOCAL_PATH }, signal);
+      if (!stat) return '';
+      const { text } = await workspace.call('read', { path: KNOWLEDGE_LOCAL_PATH, format: 'text' }, signal);
+      return text ?? '';
+    } catch {
+      return '';
+    }
+  };
+  register('chart_knowledge', t('agent-knowledge.s5e8a1c3'), agentSchema({ query: { type: 'string', maxLength: 200 }, limit: integer(1, 20) }), 'read', (args, { signal }) => ({ apply: async () => {
+    const baseline = parseKnowledgeDocument(await source.readText(KNOWLEDGE_DOCUMENT_PATH, signal));
+    const local = parseKnowledgeDocument(await readLocalKnowledgeText(signal));
+    const document = mergeKnowledgeDocuments([baseline, local]);
+    return { document: KNOWLEDGE_DOCUMENT_PATH, local: KNOWLEDGE_LOCAL_PATH, categories: KNOWLEDGE_CATEGORIES, ...searchKnowledge(document, args.query, args.limit ?? 10) };
+  } }), ['knowledge', 'knowledge base', 'kb', '知识库', '读写', '设计知识库', 'memory', 'store', 'memory store', '检索', 'read', 'design knowledge']);
+  register('chart_knowledge_write', t('agent-knowledge.sf1a0b1c'), agentSchema({ section: { type: 'string', maxLength: 40 }, title: { type: 'string', maxLength: 80 }, body: { type: 'string', maxLength: 20000 } }, ['title', 'body']), 'edit', (args, { signal }) => {
+    if (!workspace) throw Error(t('agent-knowledge.s0w0rksp'));
+    const title = String(args.title ?? '').trim(), body = String(args.body ?? '').trim(), section = String(args.section ?? '').trim() || '实战补充';
+    if (!title) throw Error(t('agent-knowledge.s7d1e4b9'));
+    if (!body) throw Error(t('agent-knowledge.s9c2f5a6'));
+    return {
+      summary: t('agent-knowledge.sa2b3c4d'),
+      details: { path: KNOWLEDGE_LOCAL_PATH, section, title },
+      valid: () => true,
+      apply: async () => {
+        const previous = await readLocalKnowledgeText(signal);
+        const next = appendKnowledgeEntry(previous, { section, title, body });
+        await workspace.call('write', { path: KNOWLEDGE_LOCAL_PATH, text: next, overwrite: true }, signal);
+        return { path: KNOWLEDGE_LOCAL_PATH, section, title, bytes: new TextEncoder().encode(next).length };
+      },
+    };
+  }, ['knowledge', 'knowledge base', 'kb', '知识库', '读写', '写', '追加', 'append', 'memory', 'store', 'memory store', 'write', 'design knowledge']);
   register('chart_templates', t('agent-editor.s3edd547'), agentSchema({ command: agentText }), 'read', args => ({ apply: () => args.command ? commands.tools().find(tool => tool.function.name === args.command)?.function ?? { error: t('agent-editor.s4b3be4d') } : {
     note: createNote(1, 0, 0), hold: createNote(2, 0, 0, 1), event: createEvent(0, 0, 0, 1), line: createLine(), noiseArea: createNoiseArea(0, 4), noiseTransform: createNoiseEvent(0, 0, 0, 1, { x: 0, y: 0 }),
     scriptApi: { createNote: t('agent-editor.s63f9b5f'), createEvent: '(start,end,startBeat,endBeat)', createLine: '(name?)', createNoiseArea: '(startBeat,endBeat)', createNoiseEvent: '(start,end,startBeat,endBeat,anchor?)', fromNumber: t('agent-editor.s27fbb3b'), beatValue: t('agent-editor.s357cb4b'), parseBeat: t('agent-editor.sc43a600'), easing: '(progress,id)' },
@@ -197,6 +236,20 @@ export function createAgentEditorCommands(commands, editor, { controls, network,
   register('audio_analyze', t('agent-editor.s58b6271'), agentSchema(audioSchema, ['start', 'end']), 'read', async (args, { signal }) => {
     const result = await audioAnalysis(args, signal); return { apply: () => result };
   });
+  // 从载入音乐后已完成的全曲 DDC 预分析中按拍段取峰值，省去 AI 主动跑模型的时间。
+  register('audio_onsets_segment', '读取全曲 DDC 预分析结果：按拍段取起音候选（不重新分析音频）', agentSchema({ line: agentIndex, start: beatSchema, end: beatSchema, minConfidence: number(0, 1), minGap: number(.02, 2) }, ['start', 'end']), 'read', args => ({ apply: () => {
+    const onsets = editor.audioOnsets;
+    if (!onsets?.fullScan) throw Error(t('agent-editor.sc6464bc'));
+    const buffer = editor.audio.buffer;
+    const chart = current(), line = chart.judgeLineList[args.line ?? editor.session.lineIndex]; if (!line) throw Error(t('agent-editor.s181a573'));
+    const tempo = new TempoMap(chart.BPMList), offset = Number(chart.META.offset ?? 0) / 1000, factor = line.bpmfactor ?? 1;
+    const start = agentBeat(args.start), end = agentBeat(args.end);
+    const startSeconds = tempo.seconds(start, factor) + offset, endSeconds = tempo.seconds(end, factor) + offset;
+    const segment = onsets.segment(buffer, startSeconds, endSeconds, { minConfidence: args.minConfidence, minGap: args.minGap });
+    if (!segment) throw Error('全曲预分析尚未完成，请先等待载入音乐后的 DDC 分析结束，或先用 audio_analyze');
+    return { ...segment, start, end, source: { id: 'original', name: t('agent-editor.sdd1d7cc') }, peaks: segment.peaks.map(peak => ({ ...peak, beat: tempo.beat(peak.seconds - offset, factor) })) };
+  } }));
+  register('audio_onsets_status', '查询全曲 DDC 预分析状态（是否完成、段数、时长）', agentSchema({}), 'read', args => ({ apply: () => ({ status: editor.audioOnsets?.fullScanStatus(editor.audio.buffer) ?? null, available: Boolean(editor.audioOnsets?.detector?.bridge) }) }));
   register('audio_taps', t('agent-editor.sc789bcf'), agentSchema({ ...audioSchema, revision: agentText, division: integer(1, 192), positionX: agentNumber, quantization: enumeration(['adaptive', 'nearest', 'none']), quantizeTolerance: number(0, .5) }, ['revision', 'line', 'start', 'end', 'division']), 'edit', async (args, { signal }) => {
     const chart = check(args), originalAudio = editor.audio.buffer, sourcesRevision = editor.audioSources?.revision, result = await audioAnalysis(args, signal); const division = args.division;
     const selected = quantizeAgentPeaks(result.peaks, { division, start: result.start, end: result.end, mode: args.quantization ?? 'adaptive', tolerance: args.quantizeTolerance ?? .2 });
@@ -207,6 +260,75 @@ export function createAgentEditorCommands(commands, editor, { controls, network,
     return { ...plan, valid: () => valid() && editor.audio.buffer === originalAudio && editor.audioSources?.revision === sourcesRevision };
   });
   register('diagnose', t('agent-editor.sb162aaf'), agentSchema({ offset: agentIndex, limit: integer(1, 200) }), 'read', args => ({ apply: () => { const issues = diagnose(current()); return { total: issues.length, issues: issues.slice(args.offset ?? 0, (args.offset ?? 0) + (args.limit ?? 50)) }; } }));
+  // 高层聚合指标：密度/类型/X分布/同步/累计/位置/事件/BPM 等一步获取，供 AI 理解谱面整体结构，
+  // 无需逐条读取音符。默认只返回紧凑统计摘要（长数组折叠为 16 桶 + 分位数），
+  // full=true 才返回原始数组；detail 可只取某个维度；diagnostics 分页。
+  register('chart_insights', t('agent-editor.sc0ffee'), agentSchema({ detail: enumeration(['summary', 'timing', 'notes', 'events', 'lines', 'all']), full: { type: 'boolean' }, offset: agentIndex, limit: integer(1, 50) }, ['detail']), 'read', args => ({ apply: () => {
+    const chart = current();
+    const m = computeChartMetrics(chart, new TempoMap(chart.BPMList));
+    // Default to the smallest useful payload. The agent opts into a specific
+    // dimension (or 'all') only when it actually needs that data.
+    const detail = args.detail ?? 'summary';
+    const section = (name, data) => (detail === 'all' || detail === name ? data : undefined);
+    const issues = diagnose(chart);
+    const issuesSlice = issues.slice(args.offset ?? 0, (args.offset ?? 0) + (args.limit ?? 50));
+    const messageOf = issue => typeof issue.message === 'string' ? issue.message : (issue.message?.message ?? '');
+    const payload = {
+      revision: revision(chart),
+      duration: m.duration,
+      // NOTE: the detail sections below are also named `notes` / `lines`.
+      // Keep the top-level counters under distinct keys, otherwise the later
+      // object properties silently overwrite them (and become `undefined`
+      // whenever detail=summary).
+      totalNotes: m.totalNotes,
+      totalLines: m.lineCount,
+      bpm: { min: m.bpmMin, max: m.bpmMax },
+      summary: section('summary', {
+        typeCounts: m.typeCounts,
+        above: m.above, below: m.below, fake: m.fake, colored: m.colored,
+        alphaTransparent: m.alphaTransparent,
+        holdCount: m.holdCount, holdAvg: Number(m.holdAvg.toFixed(3)),
+        interval: { count: m.intervalCount, median: m.intervalMedian, max: m.intervalMax },
+        offsetBins: m.offsetBins,
+        perLineNotes: m.perLineNotes,
+        perLineEvents: m.perLineEvents,
+        groups: m.groups,
+        fathers: m.fathers,
+        events: m.events,
+      }),
+      timing: section('timing', {
+        density: m.noteBins,
+        fakeDensity: m.fakeBins,
+        intervals: m.intervalBins,
+        offsetBins: m.offsetBins,
+        cumulativeByType: m.cumSeries.map(s => s.values),
+      }),
+      notes: section('notes', {
+        speedDist: m.speedDist,
+        sizeDist: m.sizeDist,
+        alphaTransparent: m.alphaTransparent,
+        posX: m.posX,
+        posXBins: m.posXBins,
+        posYCount: m.posYCount,
+        posYRange: m.posYRange,
+        posYBins: m.posYBins,
+      }),
+      events: section('events', {
+        counts: m.events,
+        times: m.eventTimes,
+        ranges: m.eventRanges,
+      }),
+      lines: section('lines', {
+        perLineNotes: m.perLineNotes,
+        perLineEvents: m.perLineEvents,
+        bpmFactors: m.bpmFactors,
+        groups: m.groups,
+        fathers: m.fathers,
+      }),
+      diagnostics: { total: issues.length, issues: issuesSlice.map(issue => ({ severity: issue.severity, code: issue.code, message: messageOf(issue), path: issue.path, line: issue.line })) },
+    };
+    return args.full ? payload : compactChartInsights(payload);
+  } }));
   register('editor_view', t('agent-editor.scec3192'), agentSchema({ line: agentIndex, layer: integer(0, 3), pane: agentText, playback: enumeration(['play', 'pause']), preview: { type: 'boolean' }, notes: array(agentIndex), events: array(agentText), noise: agentIndex }), 'edit', args => {
     const session = editor.session;
     return { summary: t('agent-editor.s76a018a'), details: args, valid: () => editor.session === session, apply: async () => {

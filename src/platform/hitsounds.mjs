@@ -87,4 +87,29 @@ export class HitSounds {
       sameTime.set(timeKey, timeCount + 1); burst++;
     }
   }
+
+  /** 播放单个命中音（用于试玩模式：仅在玩家实际按键判定时触发）。 */
+  playHit(sound, when = 0) {
+    if (!this.enabled || !this.gain) return null;
+    const buffer = this.skinBuffers.get(sound) ?? this.buffers.get(sound);
+    if (!buffer) return null;
+    if (this.sources.size >= this.maxVoices) return null;
+    const context = this.transport.context;
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.gain);
+    source.onended = () => { this.sources.delete(source); source.disconnect(); };
+    source.start(context.currentTime + Math.max(0, when));
+    this.sources.add(source);
+    return source;
+  }
+
+  /** 试玩模式：玩家实际判定某音符时，播放对应的命中音（tap/drag/flick 或自定义 hitsound）。 */
+  playJudgeHit(entry, when = 0) {
+    const note = entry?.note;
+    if (!note) return null;
+    const kind = note.type === 3 ? 'flick' : note.type === 4 ? 'drag' : 'tap';
+    const sound = note.hitsound || note.hitSound || kind;
+    return this.playHit(sound, when);
+  }
 }

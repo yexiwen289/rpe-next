@@ -1,22 +1,43 @@
 import { AGENT_PERMISSIONS, agentAbort, checkAgentSignal } from '../core/agent-commands.mjs';
-import { AGENT_CORE_TOOLS, AGENT_COMPACTION_PROMPT, AGENT_MEMORY_PREFIX, estimateAgentTokens, prepareAgentHistory, agentContextCut, trimAgentImages, agentContextPolicy, agentContextUsage } from '../core/agent-context.mjs';
+import { AGENT_CORE_TOOLS, AGENT_TOOL_COMPACT_EXEMPT, AGENT_COMPACTION_PROMPT, AGENT_MEMORY_PREFIX, compressToolResult, estimateAgentTokens, prepareAgentHistory, agentContextCut, trimAgentImages, agentContextPolicy, agentContextUsage } from '../core/agent-context.mjs';
 import { t } from '../i18n.mjs';
+
+// Tools that only work when the active provider advertises the matching
+// capability. Offering them anyway makes the model spend a round on a call
+// that can only fail.
+const CAPABILITY_TOOLS = Object.freeze({
+  search: ['web_search', 'web_fetch'],
+  images: ['editor_capture', 'preview_capture'],
+});
 
 export class EditorAgent extends EventTarget {
   constructor({ commands, providers, context, config, approve, ask, prompt, now = () => performance.now() }) {
     super(); Object.assign(this, { commands, providers, context, config, approve, ask, prompt, now }); this.messages = []; this.log = []; this.busy = false; this.steering = [];
   }
   elapsedMs() { return this.busy ? Math.max(0, this.now() - this.startedClock) : this.lastDurationMs ?? 0; }
-  event(type, detail) { this.dispatchEvent(new CustomEvent(type, { detail })); }
+  // Team members run silently: their events must not stream into the main chat
+  // panel. The orchestrator reports progress through its own callback instead.
+  // Silent team runs must not dispatch into the main chat panel, but the team
+  // UI still needs the tool traffic. A dedicated sink receives a side channel.
+  event(type, detail) {
+    if (this.silentEvents) { try { this.teamSink?.(type, detail); } catch { /* UI must never break a run */ } return; }
+    this.dispatchEvent(new CustomEvent(type, { detail }));
+  }
   stop() { this.controller?.abort(); }
   steer(text) {
     if (!this.busy || !text.trim()) return false;
     this.steering.push(text.trim()); if (this.requestPurpose !== 'compaction') this.requestController?.abort('steering'); this.toolController?.abort('steering'); return true;
   }
   reset() { this.stop(); this.messages = []; this.log = []; this.steering = []; this.event('reset', {}); }
-  async run(text, { history, instruction = '', compactOnly = false } = {}) {
+  async run(text, { history, instruction = '', compactOnly = false, roleTools = null, maxRounds: roundLimit = null, silent = false, isolated = false, finalizeOnLimit = false, limitPrompt = '', teamSink = null } = {}) {
     if (this.busy) throw Error(t('agent.s358f884'));
     if (!text.trim() && !compactOnly) return;
+    // A role run gets an isolated, compact history and a restricted tool list.
+    // `silent` suppresses UI events; `isolated` keeps the main chat history intact.
+    const previousSilent = this.silentEvents, previousSink = this.teamSink;
+    this.silentEvents = Boolean(silent); this.teamSink = teamSink;
+    this.roleAnswer = ''; this.roleError = null; this.limitExhausted = false;
+    const commit = () => { if (!isolated) this.messages = checkpoint; };
     const config = { ...this.config() }; if (!AGENT_PERMISSIONS.includes(config.permission)) throw Error(t('agent.s8614dbf'));
     const provider = this.providers.get(config.provider); if (!config.key?.trim()) throw Error(t('agent.s4e05b06'));
     const owner = this.context().session; if (!owner) throw Error(t('agent.s21c0425'));
@@ -30,9 +51,19 @@ export class EditorAgent extends EventTarget {
     const guard = () => this.context().session === owner && !controller.signal.aborted;
     const redact = value => JSON.parse(JSON.stringify(value, (name, entry) => typeof entry === 'string' ? entry.replaceAll(config.key, '[已隐藏]') : entry));
     let capabilities = provider.capabilities?.(config.model) ?? {};
-    const selectedTools = new Set(AGENT_CORE_TOOLS);
+    const roleAllow = roleTools?.length ? new Set(roleTools) : null;
+    const selectedTools = roleAllow ? new Set(roleAllow) : new Set(AGENT_CORE_TOOLS);
     for (const message of messages) for (const call of message.tool_calls ?? []) if (call.function?.name) selectedTools.add(call.function.name);
-    const tools = () => this.commands.entries.has('agent_tools') ? this.commands.tools().filter(tool => selectedTools.has(tool.function.name)) : this.commands.tools();
+    const tools = () => {
+      const all = this.commands.tools();
+      const list = roleAllow || this.commands.entries.has('agent_tools') ? all.filter(tool => selectedTools.has(tool.function.name)) : all;
+      return list.filter(tool => {
+        const name = tool.function.name;
+        if (!capabilities.search && CAPABILITY_TOOLS.search.includes(name)) return false;
+        if (!capabilities.images && CAPABILITY_TOOLS.images.includes(name)) return false;
+        return true;
+      });
+    };
     let policy = agentContextPolicy(config, capabilities), budget = policy.threshold;
     const reportContext = (tokens = estimateAgentTokens({ system, tools: tools(), messages }), estimated = true) => {
       this.contextUsage = agentContextUsage(tokens, { ...policy, threshold: budget }, estimated); this.event('context-usage', this.contextUsage);
@@ -114,10 +145,15 @@ export class EditorAgent extends EventTarget {
       reportContext();
       if (compactOnly) {
         await compress(true);
-        if (!this.steering.length) { this.messages = checkpoint = structuredClone(messages); success = true; status = 'completed'; this.event('compaction-only', { text: compacted ? t('agent.sfd58576') : t('agent.sfe0bbd6') }); return; }
+        if (!this.steering.length) { checkpoint = structuredClone(messages); commit(); success = true; status = 'completed'; this.event('compaction-only', { text: compacted ? t('agent.sfd58576') : t('agent.sfe0bbd6') }); return; }
         steer(); compactOnly = false;
       }
-      const maxRounds = Math.max(1, Math.min(4096, config.maxRounds ?? 128)); let repaired = false;
+      // Team roles request Infinity: they keep working until they actually
+      // deliver their handoff, with no per-role round budget. A finite value
+      // still applies to normal user chats (config.maxRounds).
+      const requestedRounds = roundLimit ?? config.maxRounds ?? 128;
+      const maxRounds = requestedRounds === Infinity ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(4096, requestedRounds));
+      let repaired = false;
       for (let round = 0; round < maxRounds; round++) {
         checkAgentSignal(controller.signal); if (!guard()) throw Error(t('agent.s5d3d59b'));
         if (this.steering.length) steer();
@@ -138,10 +174,11 @@ export class EditorAgent extends EventTarget {
         reportContext(Number.isFinite(tokenUsage?.prompt_tokens) ? tokenUsage.prompt_tokens + (tokenUsage.completion_tokens ?? 0) : undefined, !Number.isFinite(tokenUsage?.prompt_tokens));
         this.event('assistant-end', { text: assistant.content ?? '', reasoning: assistant.reasoning_content ?? '', final: !assistant.tool_calls?.length, model: model ?? config.model, usage: tokenUsage, durationMs: lastRequestMs });
         if (!assistant.tool_calls?.length) {
+          this.roleAnswer = assistant.content ?? '';
           checkpoint = structuredClone(messages); checkpointTranscript = structuredClone(transcript);
           this.turnMessages = checkpointTranscript;
           if (this.steering.length) { steer(); continue; }
-          success = true; status = 'completed'; this.messages = checkpoint; return;
+          success = true; status = 'completed'; commit(); return;
         }
         const images = [];
         for (const call of assistant.tool_calls) {
@@ -157,28 +194,70 @@ export class EditorAgent extends EventTarget {
             if (controller.signal.aborted) throw error;
             result = { ok: false, cancelled: toolController.signal.aborted, error: String(error.message).replaceAll(config.key, '[已隐藏]') };
           } finally { if (this.toolController === toolController) this.toolController = null; }
-          if (call.function.name === 'agent_tools' && result.ok) for (const entry of result.result?.commands ?? []) selectedTools.add(entry.name);
+          if (!roleAllow && call.function.name === 'agent_tools' && result.ok) for (const entry of result.result?.commands ?? []) selectedTools.add(entry.name);
           const image = result.result?.image; if (image) delete result.result.image;
-          const content = JSON.stringify(result), message = { role: 'tool', tool_call_id: call.id, content: content.length > 60000 ? JSON.stringify({ ok: false, error: t('agent.s7497cbc'), characters: content.length }) : content };
+          // Keep the full result for the UI event / tool log, but push a
+          // structurally compacted version into the model context. This is the
+          // main defence against a few verbose tools exhausting the window.
+          const full = JSON.stringify(result);
+          const exempt = AGENT_TOOL_COMPACT_EXEMPT.has(call.function.name);
+          const compacted = exempt ? { text: full, compressed: false, originalChars: full.length } : compressToolResult(result, { maxChars: Math.max(800, Number(config.toolResultBudget) || 6000) });
+          const content = compacted.text.length > 60000 ? JSON.stringify({ ok: false, error: t('agent.s7497cbc'), characters: compacted.text.length }) : compacted.text;
+          const message = { role: 'tool', tool_call_id: call.id, content };
           messages.push(message); transcript.push(message);
-          this.log.push({ role: 'tool', name: call.function.name, text: content }); this.event('tool-end', { id: call.id, name: call.function.name, result });
+          this.log.push({ role: 'tool', name: call.function.name, text: content });
+          this.event('tool-end', { id: call.id, name: call.function.name, result, compressed: compacted.compressed, originalChars: compacted.originalChars });
           if (image && capabilities.images) images.push({ role: 'user', content: [{ type: 'text', text: t('agent.sa72ef18') + call.function.name + t('agent.s4d1f0a3') }, { type: 'image_url', image_url: { url: image } }] });
         }
         messages.push(...images); transcript.push(...images);
         trimAgentImages(messages, Boolean(capabilities.images));
-        this.messages = checkpoint = structuredClone(messages); checkpointTranscript = structuredClone(transcript);
+        checkpoint = structuredClone(messages); commit(); checkpointTranscript = structuredClone(transcript);
         this.turnMessages = checkpointTranscript;
         if (this.steering.length) steer();
+      }
+      // A team member that runs out of tool rounds must not be reported as a
+      // failure: its edits are already on the chart and the next role needs
+      // what it learned. Ask for one final, tool-free handoff instead.
+      if (finalizeOnLimit) {
+        const prompt = limitPrompt || 'Tool rounds exhausted. Output a short final handoff now, with no tool calls.';
+        let summary = '';
+        try {
+          const response = await invoke({
+            // A handoff needs real content; do not let a tiny output cap cut
+            // it off after the opening marker.
+            config: { ...config, thinking: false, maxTokens: Math.max(4096, Math.min(16384, config.maxTokens ?? 8192)) },
+            system: system + '\n' + prompt,
+            messages: [...messages, { role: 'user', content: prompt }],
+            tools: [],
+          }, 'chat');
+          summary = String(response.content ?? '').trim();
+        } catch { /* network/context failure: reuse the last assistant text instead */ }
+        if (!summary) for (let index = messages.length - 1; index >= 0; index--) {
+          const entry = messages[index];
+          if (entry.role === 'assistant' && typeof entry.content === 'string' && entry.content.trim()) { summary = entry.content.trim(); break; }
+        }
+        if (summary) {
+          this.roleAnswer = summary; this.limitExhausted = true;
+          messages.push({ role: 'assistant', content: summary }); transcript.push({ role: 'assistant', content: summary });
+          checkpoint = structuredClone(messages); checkpointTranscript = structuredClone(transcript);
+          this.turnMessages = checkpointTranscript; commit();
+          success = true; status = 'completed';
+          return;
+        }
       }
       throw Error(t('agent.se4c2f89'));
     } catch (error) {
       const message = controller.signal.aborted ? t('agent.sa3e2c2f') : String(error.message).replaceAll(config.key, '[已隐藏]');
       status = controller.signal.aborted ? 'stopped' : 'failed'; this.event('error', { message, aborted: controller.signal.aborted }); this.log.push({ role: 'error', text: message });
-      if (this.context().session === owner) this.messages = checkpoint;
+      if (this.context().session === owner) commit();
+      this.roleError = message;
     } finally {
       statistics.durationMs = this.lastDurationMs = this.elapsedMs(); this.busy = false; this.controller = this.requestController = this.toolController = null;
+      // Keep suppressing events until AFTER the final ones are emitted: a
+      // silent team run must not leak turn-end/state into the main chat panel.
       this.event('turn-end', { runId, status, statistics, messages: structuredClone(checkpointTranscript), contextMessages: structuredClone(checkpoint), contextUsage: this.contextUsage, compacted });
       this.event('state', { busy: false, success });
+      this.silentEvents = previousSilent; this.teamSink = previousSink;
     }
   }
 }

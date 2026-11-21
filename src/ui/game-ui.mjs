@@ -1,8 +1,9 @@
 import { gameUiLayout, gameUiBindings, scoreAt } from '../core/game-ui.mjs';
 import { chartDisplayName } from '../core/labels.mjs';
 
-export function drawGameUi(context, chart, states, completionTimes, seconds, selectedLine, viewport, viewScale, skin, duration) {
-  const { combo, score } = scoreAt(completionTimes, seconds);
+export function drawGameUi(context, chart, states, completionTimes, seconds, selectedLine, viewport, viewScale, skin, duration, judge) {
+  // 试玩模式传入真实判定结果，否则沿用「全部命中」的教学式计数
+  const { combo, score } = judge ? { combo: judge.combo, score: judge.score } : scoreAt(completionTimes, seconds);
   const progress = Math.max(0, Math.min(1, (seconds + (chart.META.offset ?? 0) / 1000) / Math.max(0.001, duration)));
   const bindings = gameUiBindings(chart, states);
   const texts = { combonumber: String(combo), combo: 'combo', score: String(score).padStart(7, '0'), name: chartDisplayName(chart.META.name), level: chart.META.level ?? '' };

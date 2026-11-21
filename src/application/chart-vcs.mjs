@@ -6,9 +6,9 @@ import {
 } from '../core/chart-vcs.mjs';
 import { t } from '../i18n.mjs';
 
-export const VCS_FORMAT = 'rpe-next-chart-vcs';
+export const VCS_FORMAT = 'vibephi-chart-vcs';
 export const VCS_VERSION = 1;
-const DEFAULT_AUTHOR = { name: t('chart-vcs.sea431f3'), email: 'local@rpe-next' };
+const DEFAULT_AUTHOR = { name: t('chart-vcs.sea431f3'), email: 'local@vibephi' };
 const MAX_REFLOG = 200;
 
 const randomId = () => globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;

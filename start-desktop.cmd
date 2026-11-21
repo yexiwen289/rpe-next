@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title RePhiEdit Next - Desktop
+title VibePhi - Desktop
 
 where node >nul 2>nul
 if errorlevel 1 (
@@ -31,7 +31,7 @@ if not exist "node_modules\electron\dist\electron.exe" (
   exit /b 1
 )
 
-echo [RUN] Launching RePhiEdit Next desktop app...
+echo [RUN] Launching VibePhi desktop app...
 set ELECTRON_RUN_AS_NODE=
 set NODE_OPTIONS=
 "node_modules\electron\dist\electron.exe" "desktop\main.cjs"

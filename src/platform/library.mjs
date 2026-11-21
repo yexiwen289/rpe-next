@@ -5,7 +5,7 @@ import { assertChart } from '../core/chart.mjs';
 import { nativeStorage, nativeReady, nativeWrite, nativeRead, nativeList, nativeAssetBytes } from './native.mjs';
 import { t } from '../i18n.mjs';
 
-export const libraryDatabase = () => openDatabase('rpe-next-library', 2, (connection, transaction) => {
+export const libraryDatabase = () => openDatabase('vibephi-library', 2, (connection, transaction) => {
   for (const name of ['projects', 'summaries', 'revisions']) ensureStore(connection, transaction, name, { keyPath: 'id' });
   ensureStore(connection, transaction, 'preferences');
 });
@@ -25,7 +25,7 @@ async function access(stores, mode, action) {
 
 const projectWrites = new Map();
 let channel;
-function changes() { return channel ??= typeof BroadcastChannel === 'function' ? new BroadcastChannel('rpe-next-library-v2') : null; }
+function changes() { return channel ??= typeof BroadcastChannel === 'function' ? new BroadcastChannel('vibephi-library-v2') : null; }
 export function subscribeLibrary(callback) {
   const connection = changes(); if (!connection) return () => {};
   const receive = event => callback(event.data);

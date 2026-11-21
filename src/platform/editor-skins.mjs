@@ -6,7 +6,7 @@ import { nativeStorage, nativePackages } from './native.mjs';
 import { t } from '../i18n.mjs';
 
 async function access(mode, action) {
-  const connection = await openDatabase('rpe-next-editor-skins', 1, (connection, transaction) => ensureStore(connection, transaction, 'packages', { keyPath: 'id' }));
+  const connection = await openDatabase('vibephi-editor-skins', 1, (connection, transaction) => ensureStore(connection, transaction, 'packages', { keyPath: 'id' }));
   return new Promise((resolve, reject) => {
     const transaction = connection.transaction('packages', mode); let request;
     try { request = action(transaction.objectStore('packages')); } catch (error) { connection.close(); reject(error); return; }

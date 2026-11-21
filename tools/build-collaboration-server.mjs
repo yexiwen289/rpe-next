@@ -14,7 +14,7 @@ await rename(join(output, 'electron.exe'), join(output, 'RPE-Collaboration-Serve
 const application = join(output, 'resources', 'app');
 for (const name of [...SERVER_PACKAGE_SOURCES, 'collaboration-server/package.json', 'collaboration-server/node_modules/ws']) { await mkdir(dirname(join(application, name)), { recursive: true }); await cp(join(root, name), join(application, name), { recursive: true }); }
 await cp(join(root, 'collaboration-server/README.md'), join(output, 'README.md'));
-await writeFile(join(application, 'package.json'), JSON.stringify({ name: 'rpe-next-collaboration-server', version: '0.1.0', main: 'collaboration-server/manager.cjs', author: 'cmdysj', license: 'PolyForm-Noncommercial-1.0.0' }));
+await writeFile(join(application, 'package.json'), JSON.stringify({ name: 'vibephi-collaboration-server', version: '0.1.0', main: 'collaboration-server/manager.cjs', author: 'cmdysj', license: 'PolyForm-Noncommercial-1.0.0' }));
 const permissions = spawnSync('icacls.exe', [output, '/grant', '*S-1-15-2-1:(OI)(CI)(RX)', '/T', '/Q'], { windowsHide: true });
 if (permissions.status !== 0) throw new Error('无法设置服务器工具读取权限');
 console.log(output);

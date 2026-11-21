@@ -4,7 +4,7 @@ import { nativeStorage, nativeReady, nativeWrite, nativeRead, nativeAssetBytes }
 import { t } from '../i18n.mjs';
 
 function database() {
-  return openDatabase('rpe-next-recovery', 2, (connection, transaction, oldVersion) => {
+  return openDatabase('vibephi-recovery', 2, (connection, transaction, oldVersion) => {
     const drafts = ensureStore(connection, transaction, 'drafts', { keyPath: 'id' });
     const summaries = ensureStore(connection, transaction, 'summaries', { keyPath: 'id' });
     if (!summaries.indexNames.contains('projectId')) summaries.createIndex('projectId', 'projectId');

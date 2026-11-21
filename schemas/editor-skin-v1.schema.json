@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "RPEN editor skin v1",
+  "title": "VibePhi editor skin v1",
   "type": "object",
   "required": [
     "protocol",
@@ -8,7 +8,7 @@
     "id",
     "name"
   ],
-  "description": "Structural validation only. Package paths, resources, references, selectors and security require the RPEN importer. Unknown fields are ignored; use x- for metadata extensions.",
+  "description": "Structural validation only. Package paths, resources, references, selectors and security require the VibePhi importer. Unknown fields are ignored; use x- for metadata extensions.",
   "properties": {
     "protocol": {
       "const": "rpen-editor-skin"

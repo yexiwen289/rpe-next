@@ -1,4 +1,4 @@
-# RPEN 模组协议与开发指南 · API 1
+# VibePhi 模组协议与开发指南 · API 1
 
 AI命令扩展：`api.agent.register(definition)` 可将任意模组功能注册给内置Agent，`api.agent.list()` 查看工具结构，卸载自动注销；通用谱面工具也能读写模组字段。权限、只读prepare、变更计划、执行一致性和Provider扩展详见 [AI Agent协议](AI-AGENT-PROTOCOL.zh-CN.md)。此项为API1兼容扩展，不要求旧模组修改。
 
@@ -166,7 +166,7 @@ export function activate(api) {
 
 事件取样及属性拖动可以使用临时谱面和循环预览时间，因此预览钩子、`onPreview` 和渲染包装函数应使用回调传入的 `chart/seconds`；它们不一定等于已提交谱面和实际播放头。`onFrame` 的 `chartSeconds/musicSeconds` 仍表示实际播放时间。以上行为沿用 API 1。
 
-原有 RPEN 导出路径有自己的排序、兼容转换和媒体打包流程。`chart:serialize` 对所有调用该函数的路径生效，但不是任意文件格式流水线的万能拦截点。要完全替换导入、保存、兼容导出或预览算法，可以包装相应实例 / 类原型，或者实现自己的按钮及流水线。
+原有 VibePhi 导出路径有自己的排序、兼容转换和媒体打包流程。`chart:serialize` 对所有调用该函数的路径生效，但不是任意文件格式流水线的万能拦截点。要完全替换导入、保存、兼容导出或预览算法，可以包装相应实例 / 类原型，或者实现自己的按钮及流水线。
 
 ```js
 export function activate(api) {

@@ -48,7 +48,7 @@ const server = createServer(async (request, response) => {
 server.on('error', error => { console.error(`启动失败：${error.message}。可设置 RPE_PORT 更换端口。`); process.exitCode = 1; });
 server.listen(port, '127.0.0.1', () => {
   const url = `http://127.0.0.1:${port}`;
-  console.log(`Re:PhiEdit Next: ${url}\nCtrl+C 停止本地服务。`);
+  console.log(`VibePhi: ${url}\nCtrl+C 停止本地服务。`);
   if (process.argv.includes('--open')) {
     const executable = process.platform === 'win32' ? 'rundll32.exe' : process.platform === 'darwin' ? 'open' : 'xdg-open';
     const argumentsList = process.platform === 'win32' ? ['url.dll,FileProtocolHandler', url] : [url];

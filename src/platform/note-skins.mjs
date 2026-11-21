@@ -6,7 +6,7 @@ import { nativeStorage, nativePackages } from './native.mjs';
 import { t } from '../i18n.mjs';
 
 async function access(mode, action) {
-  const database = await openDatabase('rpe-next-note-skins', 1, (connection, transaction) => ensureStore(connection, transaction, 'packages', { keyPath: 'id' }));
+  const database = await openDatabase('vibephi-note-skins', 1, (connection, transaction) => ensureStore(connection, transaction, 'packages', { keyPath: 'id' }));
   return new Promise((resolve,reject) => {
     const transaction = database.transaction('packages',mode); let request;
     try {request=action(transaction.objectStore('packages'));} catch(error) {database.close();reject(error);return;}

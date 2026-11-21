@@ -93,7 +93,7 @@ export class ModRuntime {
     return scope.defer(()=>{stack.entries=stack.entries.filter(item=>item!==entry);if(stack.entries.length)rebuild();else{if(stack.had)Object.defineProperty(target,key,stack.descriptor);else delete target[key];props.delete(key);}});
   }
   createApi(state){
-    const {scope,id,record}=state;const storedKey='rpe-next-mod-data:'+id;
+    const {scope,id,record}=state;const storedKey='vibephi-mod-data:'+id;
     const manifest=resolveModManifest(record.manifest);
     const api={version:1,id,manifest,manifestSource:structuredClone(record.manifest),editor:this.editor,signal:scope.controller.signal,dispose:fn=>scope.defer(fn),
       log:(...args)=>console.log('[mod '+id+']',...args),notify:(message,level='success')=>this.notify(String(message),level),

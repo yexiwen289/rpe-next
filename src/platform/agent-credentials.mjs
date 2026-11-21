@@ -6,7 +6,7 @@ export class AgentCredentials {
   async open() {
     if (!this.database) throw Error(t('agent-credentials.s4c09988'));
     return new Promise((resolve, reject) => {
-      const request = this.database.open('rpe-next-agent-credentials', 1);
+      const request = this.database.open('vibephi-agent-credentials', 1);
       request.onupgradeneeded = () => request.result.createObjectStore('keys');
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(Error(t('agent-credentials.s6df44e9')));

@@ -70,7 +70,7 @@ app.whenReady().then(async () => {
       document.querySelector('#preferences').click(); const control = document.querySelector('#wheel-limit-audio-start'); control.checked = false; control.dispatchEvent(new Event('input', { bubbles: true })); document.querySelector('#settings-modal').close();
     }); await wheel(-120);
     assert.ok(await run(() => window.qaTracker.context.seconds() < -0.25));
-    assert.equal(await run(() => JSON.parse(localStorage.getItem('rpe-next-editor-v1')).wheelStopAtAudioStart), false);
+    assert.equal(await run(() => JSON.parse(localStorage.getItem('vibephi-editor-v1')).wheelStopAtAudioStart), false);
     await run(() => {
       document.querySelector('#preferences').click(); const control = document.querySelector('#wheel-limit-audio-start'); control.checked = true; control.dispatchEvent(new Event('input', { bubbles: true })); document.querySelector('#settings-modal').close();
     }); await wheel(-120);
@@ -207,7 +207,7 @@ app.whenReady().then(async () => {
         for (const enabled of [true,false,true]) {
           control.checked=enabled; control.dispatchEvent(new Event('input',{bubbles:true}));
           let segments=0; context.lineTo=function(...args){segments++;return original.apply(this,args);}; editor.draw();
-          const saved=JSON.parse(localStorage.getItem('rpe-next-editor-v1')).drawEventCurves;
+          const saved=JSON.parse(localStorage.getItem('vibephi-editor-v1')).drawEventCurves;
           if (saved !== enabled || editor.context.timeline.drawEventCurves !== enabled) throw Error('event curve preference was not applied/saved');
           results.push({enabled,segments,hitRects:editor.rects.filter(rect=>rect.type==='moveXEvents').length});
         }

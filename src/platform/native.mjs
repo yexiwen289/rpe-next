@@ -97,7 +97,7 @@ async function legacyRead(database, store, key, keys = false) {
 }
 
 async function migrateLegacy() {
-  const sources = [['rpe-next-library', 'projects', 'projects'], ['rpe-next-recovery', 'drafts', 'drafts'], ['rpe-next-editor-skins', 'packages', 'editor-skins'], ['rpe-next-note-skins', 'packages', 'note-skins'], ['rpe-next-mods', 'packages', 'mods'], ['rpe-next-library', 'preferences', 'preferences']];
+  const sources = [['vibephi-library', 'projects', 'projects'], ['vibephi-recovery', 'drafts', 'drafts'], ['vibephi-editor-skins', 'packages', 'editor-skins'], ['vibephi-note-skins', 'packages', 'note-skins'], ['vibephi-mods', 'packages', 'mods'], ['vibephi-library', 'preferences', 'preferences']];
   let overlay;
   try {
     for (const [name, store, kind] of sources) {

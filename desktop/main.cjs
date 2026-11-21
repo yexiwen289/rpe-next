@@ -27,7 +27,7 @@ const smokeAgent = process.argv.includes('--smoke-agent');
 const smokeAudio = process.argv.includes('--smoke-audio');
 const smokeMapper = process.argv.includes('--smoke-mapper');
 const smoke = process.argv.includes('--smoke-test') || smokeSettings || smokeMedia || smokeMods || smokeNative || smokeSaving || smokeAgent || smokeAudio || smokeMapper;
-app.setName('RePhiEdit Next');
+app.setName('VibePhi');
 app.setPath('userData', (smokeNative || smokeSaving || smokeAgent || smokeAudio || smokeMapper) && process.env.RPE_NATIVE_TEST_HOME ? resolve(process.env.RPE_NATIVE_TEST_HOME) : smoke ? resolve(app.getPath('temp'), 'rpe-next-smoke-' + Date.now()) : resolve(app.getPath('appData'), 'rpe-next-desktop'));
 mkdirSync(app.getPath('userData'), { recursive: true });
 protocol.registerSchemesAsPrivileged([{ scheme: 'rpe', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
@@ -90,7 +90,7 @@ else {
     installAgentCredentials({ ipcMain, vault: agentCredentials, origin, window: () => mainWindow });
     const configPath = resolve(app.getPath('userData'), 'native-storage.json');
     let config; try { config = JSON.parse(await readFile(configPath, 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    let nativeRoot = config?.root ?? (smoke ? resolve(app.getPath('userData'), 'Library') : resolve(app.getPath('documents'), 'RePhiEdit Next', 'Library'));
+    let nativeRoot = config?.root ?? (smoke ? resolve(app.getPath('userData'), 'Library') : resolve(app.getPath('documents'), 'VibePhi', 'Library'));
     for (;;) {
       native = new NativeService(nativeRoot);
       try { await native.ready; break; }
@@ -103,7 +103,7 @@ else {
         if (selected.canceled) { app.quit(); return; }
         const candidate = resolve(selected.filePaths[0]);
         let marker; try { marker = JSON.parse(await readFile(resolve(candidate, 'library.json'), 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-        nativeRoot = marker ? candidate : resolve(candidate, 'RPENLibrary');
+        nativeRoot = marker ? candidate : resolve(candidate, 'VibePhiLibrary');
       }
     }
     if (!config || config.root !== nativeRoot) { config = { ...config, version: 1, root: nativeRoot }; await atomicJson(configPath, config); }
@@ -125,7 +125,7 @@ else {
         else if (['chooseRoot', 'backupFolder', 'useRoot'].includes(method)) {
           const selected = await dialog.showOpenDialog(mainWindow, { title: method === 'useRoot' ? '选择包含 library.json 的已有谱面库或完整备份' : method === 'chooseRoot' ? '选择新谱面库的上级文件夹' : '选择独立备份文件夹', properties: ['openDirectory', 'createDirectory'] });
           if (selected.canceled) return { ok: true, result: null };
-          const destination = method === 'useRoot' ? resolve(selected.filePaths[0]) : resolve(selected.filePaths[0], method === 'chooseRoot' ? 'RPENLibrary' : 'RPENBackup-' + new Date().toISOString().replace(/[:.]/g, '-'));
+          const destination = method === 'useRoot' ? resolve(selected.filePaths[0]) : resolve(selected.filePaths[0], method === 'chooseRoot' ? 'VibePhiLibrary' : 'VibePhiBackup-' + new Date().toISOString().replace(/[:.]/g, '-'));
           if (relocating) throw Error('已有谱面库操作正在进行');
           if (tokens.size) throw Error('正在保存，请保存结束后再迁移或备份');
           relocating = true;
@@ -181,7 +181,7 @@ else {
     });
     mainWindow = new BrowserWindow({
       width: 1440, height: 960, minWidth: 1000, minHeight: 680,
-      title: 'Re:PhiEdit Next', backgroundColor: '#171c25', show: false,
+      title: 'VibePhi', backgroundColor: '#171c25', show: false,
       autoHideMenuBar: true,
       webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: resolve(__dirname, 'preload.cjs'), spellcheck: false, backgroundThrottling: !smoke }
     });

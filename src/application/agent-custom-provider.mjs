@@ -6,7 +6,7 @@
 // baseUrl / model / key without touching the source tree.
 
 export const CUSTOM_PROVIDER_ID = 'custom';
-export const CUSTOM_SETTINGS_KEY = 'rpe-next-agent-custom-v1';
+export const CUSTOM_SETTINGS_KEY = 'vibephi-agent-custom-v1';
 
 export const DEFAULT_SENSENOVA_BASE_URL = 'https://token.sensenova.cn/v1';
 export const DEFAULT_SENSENOVA_MODEL = 'sensenova-6.8-flash-lite';

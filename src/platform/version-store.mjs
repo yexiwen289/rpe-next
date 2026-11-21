@@ -2,10 +2,10 @@ import { openDatabase, ensureStore } from './storage.mjs';
 import { nativeStorage, nativeReady, nativeWrite, nativeRead } from './native.mjs';
 import { t } from '../i18n.mjs';
 
-const DATABASE = 'rpe-next-chart-vcs';
+const DATABASE = 'vibephi-chart-vcs';
 const VERSION = 1;
 const NATIVE_KINDS = { repos: 'version-repos', commits: 'version-commits', trees: 'version-trees', blobs: 'version-blobs' };
-const NATIVE_MIGRATION_KEY = 'rpe-next-chart-vcs-native-migrated-v1';
+const NATIVE_MIGRATION_KEY = 'vibephi-chart-vcs-native-migrated-v1';
 
 function versionDatabase() {
   return openDatabase(DATABASE, VERSION, (connection, transaction) => {

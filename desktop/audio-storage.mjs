@@ -123,12 +123,12 @@ export class AudioStorage {
     try {
       if (typeof parent !== 'string' || !isAbsolute(parent)) throw Error('请选择有效的目标文件夹');
       parent = await realpath(parent); if (!(await stat(parent)).isDirectory()) throw Error('目标不是文件夹');
-      destination = join(parent, 'RPEN-Audio');
+      destination = join(parent, 'VibePhi-Audio');
       for (const root of new Set([...Object.values(this.roots), ...Object.values(previous)])) {
         const canonical = await exists(root) ? await realpath(root) : resolve(root);
         if (inside(canonical, destination) || inside(destination, canonical)) throw Error('目标目录不能与原音频目录重叠或相互包含');
       }
-      if (await exists(destination)) throw Error('目标中的 RPEN-Audio 已存在，请选择其他文件夹；不会覆盖已有文件');
+      if (await exists(destination)) throw Error('目标中的 VibePhi-Audio 已存在，请选择其他文件夹；不会覆盖已有文件');
       this.progress({ stage: 'scan', message: '正在检查模型、缓存和目标磁盘空间…' });
       const source = await inventory(previous), bytes = source.files.reduce((sum, entry) => sum + entry.size, 0);
       const free = await this.availableSpace(parent), required = BigInt(bytes) + BigInt(Math.max(64 * 1024 ** 2, Math.ceil(bytes * .05)));
@@ -216,7 +216,7 @@ export class AudioStorage {
 export function installAudioStorage({ ipcMain, service, origin, window: getWindow, dialog, shell }) {
   service.requestSetup = async () => {
     if (service.migrating || service.cleaning) throw busy(); service.assertIdle();
-    const window = getWindow(), answer = await dialog.showMessageBox(window, { type: 'info', message: '首次使用本机音频工具：选择存放位置', detail: '声部分离与 AI 采音需要下载运行环境和模型，可能占用数 GB 至数十 GB；处理结果、安装包和临时缓存也会继续增长。\n\n请选择有足够空间的文件夹，建议使用非系统盘。新安装的环境、模型和缓存将存放于所选文件夹的 RPEN-Audio 中；已有运行环境保留原位，模型与缓存会安全迁移。以后可在“音频分析 → 模型与缓存位置”中查看和迁移，或清理全部谱面的音频缓存。', buttons: ['选择存放位置', '取消'], defaultId: 0, cancelId: 1 });
+    const window = getWindow(), answer = await dialog.showMessageBox(window, { type: 'info', message: '首次使用本机音频工具：选择存放位置', detail: '声部分离与 AI 采音需要下载运行环境和模型，可能占用数 GB 至数十 GB；处理结果、安装包和临时缓存也会继续增长。\n\n请选择有足够空间的文件夹，建议使用非系统盘。新安装的环境、模型和缓存将存放于所选文件夹的 VibePhi-Audio 中；已有运行环境保留原位，模型与缓存会安全迁移。以后可在“音频分析 → 模型与缓存位置”中查看和迁移，或清理全部谱面的音频缓存。', buttons: ['选择存放位置', '取消'], defaultId: 0, cancelId: 1 });
     if (answer.response !== 0) return false;
     const selected = await dialog.showOpenDialog(window, { title: '选择音频环境、模型与缓存的存放位置', properties: ['openDirectory', 'createDirectory'] });
     if (selected.canceled) return false;
@@ -237,9 +237,9 @@ export function installAudioStorage({ ipcMain, service, origin, window: getWindo
       }
       if (action !== 'migrate') throw Error('不支持的音频存储操作');
       if (service.migrating || service.cleaning) throw busy(); service.assertIdle();
-      const selected = await dialog.showOpenDialog(window, { title: '选择模型与缓存的目标文件夹（将在其中创建 RPEN-Audio）', properties: ['openDirectory', 'createDirectory'] });
+      const selected = await dialog.showOpenDialog(window, { title: '选择模型与缓存的目标文件夹（将在其中创建 VibePhi-Audio）', properties: ['openDirectory', 'createDirectory'] });
       if (selected.canceled) return { ok: true, result: null };
-      const answer = await dialog.showMessageBox(window, { type: 'question', message: '迁移音频模型与缓存？', detail: '目标：' + join(selected.filePaths[0], 'RPEN-Audio') + '\n\n迁移三套音频工具的模型、结果、下载及临时缓存。复制并逐文件校验后才切换位置和清理原缓存；不会覆盖已有目标。Python 运行环境保留原位，谱面与原音乐不变。', buttons: ['迁移', '取消'], defaultId: 1, cancelId: 1 });
+      const answer = await dialog.showMessageBox(window, { type: 'question', message: '迁移音频模型与缓存？', detail: '目标：' + join(selected.filePaths[0], 'VibePhi-Audio') + '\n\n迁移三套音频工具的模型、结果、下载及临时缓存。复制并逐文件校验后才切换位置和清理原缓存；不会覆盖已有目标。Python 运行环境保留原位，谱面与原音乐不变。', buttons: ['迁移', '取消'], defaultId: 1, cancelId: 1 });
       if (answer.response !== 0) return { ok: true, result: null };
       return { ok: true, result: await service.migrate(selected.filePaths[0]) };
     } catch (error) { return { ok: false, error: { name: error.name, message: error.message } }; }

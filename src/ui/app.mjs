@@ -200,7 +200,7 @@ const fileOptions = () => ({ includeBackupCharts: editorPreferences.includeBacku
 let atHome = true;
 let hasDocument = false;
 // Set before a language switch reloads the page so the same chart reopens.
-const LOCALE_REOPEN_KEY = 'rpe-next-reopen-project';
+const LOCALE_REOPEN_KEY = 'vibephi-reopen-project';
 let previewReturnTime = 0;
 let placementContext;
 let heldPreview;

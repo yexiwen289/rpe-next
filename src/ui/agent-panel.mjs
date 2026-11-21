@@ -13,7 +13,7 @@ import { t } from '../i18n.mjs';
 import { CUSTOM_PROVIDER_ID, CUSTOM_SETTINGS_KEY, agentCustomConfig } from '../application/agent-custom-provider.mjs';
 import { runtimeEnv } from '../platform/runtime-env.mjs';
 
-const SETTINGS = 'rpe-next-agent-v1';
+const SETTINGS = 'vibephi-agent-v1';
 const DEFAULT_GLM_BASE_URL = 'https://xh.v1api.cc/v1';
 // 密钥来自本地 .env（RPE_GLM_API_KEY），源码中不留明文。
 const DEFAULT_GLM_API_KEY = runtimeEnv('RPE_GLM_API_KEY');

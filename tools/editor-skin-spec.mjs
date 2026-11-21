@@ -12,8 +12,8 @@ const localized = value => ({ oneOf: [value, { type: 'object', minProperties: 1,
 const declarations = { ...map(css, 100), propertyNames: { pattern: '^(--(skin|rpen)-[a-z0-9-]+|-?[a-z][a-z0-9-]*)$' } };
 const schema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
-  title: 'RPEN editor skin v1', type: 'object', required: ['protocol', 'version', 'id', 'name'],
-  description: 'Structural validation only. Package paths, resources, references, selectors and security require the RPEN importer. Unknown fields are ignored; use x- for metadata extensions.',
+  title: 'VibePhi editor skin v1', type: 'object', required: ['protocol', 'version', 'id', 'name'],
+  description: 'Structural validation only. Package paths, resources, references, selectors and security require the VibePhi importer. Unknown fields are ignored; use x- for metadata extensions.',
   properties: {
     protocol: { const: 'rpen-editor-skin' }, version: { const: 1 },
     id: { ...identifier, not: { const: 'default' } }, name: { type: 'string', minLength: 1, maxLength: 80 },

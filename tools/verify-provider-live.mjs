@@ -4,7 +4,7 @@ const KEY = process.env.RPE_GLM_API_KEY || '';
 if (!KEY) { console.error('请先设置环境变量 RPE_GLM_API_KEY（见 .env.example）'); process.exit(1); }
 const provider = createOpenAIProvider({ id: 'glm', name: 'GLM', baseUrl: 'https://xh.v1api.cc/v1', models: ['deepseek-v4.1-flash-1017'], defaultModel: 'deepseek-v4.1-flash-1017', capabilities: { tools: true, streaming: true, images: true, search: false, contextWindow: 131072 } });
 
-const SYSTEM = '你是 Re:PhiEdit Next 的谱面助手。' + '请用简洁的中文回答，并优先使用工具读写谱面。'.repeat(300);
+const SYSTEM = '你是 VibePhi 的谱面助手。' + '请用简洁的中文回答，并优先使用工具读写谱面。'.repeat(300);
 const TOOLS = [{ type: 'function', function: { name: 'chart_read', description: '读取谱面内容'.repeat(10), parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } } }];
 
 async function run(label, config, messages, { tools = TOOLS } = {}) {

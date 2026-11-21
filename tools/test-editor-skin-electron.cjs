@@ -173,7 +173,7 @@ app.whenReady().then(async () => {
       if (manager.runtime.prepared.record.skin.tokens['param-panel-width'] !== '400px') throw Error('user parameter did not preview');
       manager.confirmPreview();
       if (getComputedStyle(manager.recovery).display !== 'none') throw Error('preview confirmation left a persistent recovery button');
-      const options = JSON.parse(localStorage.getItem('rpe-next-editor-skin-options-v1'));
+      const options = JSON.parse(localStorage.getItem('vibephi-editor-skin-options-v1'));
       if (options[skin.id]?.parameters['panel-width'] !== 400 || options[skin.id]?.variant !== 'night') throw Error('skin appearance preferences were not persisted');
       const pixelCount = (id, matches) => { const canvas = document.querySelector(id); const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data; let count = 0; for (let offset = 0; offset < pixels.length; offset += 4) if (matches(pixels[offset], pixels[offset + 1], pixels[offset + 2], pixels[offset + 3])) count++; return count; };
       await frame(); const densityPixels = pixelCount('#note-density', (red, green, blue, alpha) => red > 180 && green < 30 && blue > 180 && alpha > 20);
@@ -193,7 +193,7 @@ app.whenReady().then(async () => {
       const other = structuredClone(manager.options['api-two-check']); manager.resetParametersButton.click();
       for (let count = 0; count < 50 && manager.runtime.prepared.record.skin.tokens['param-panel-width'] !== '350px'; count++) await new Promise(resolve => requestAnimationFrame(resolve));
       if (manager.current !== 'test-skin' || manager.runtime.prepared.record.skin.tokens['param-panel-width'] !== '350px' || manager.runtime.prepared.record.skin.tokens['param-accent'] !== '#2469d9') throw Error('reset button did not apply package defaults');
-      if (Object.keys(JSON.parse(localStorage.getItem('rpe-next-editor-skin-options-v1'))['test-skin'].parameters).length) throw Error('reset defaults not persisted');
+      if (Object.keys(JSON.parse(localStorage.getItem('vibephi-editor-skin-options-v1'))['test-skin'].parameters).length) throw Error('reset defaults not persisted');
       if (JSON.stringify(manager.options['api-two-check']) !== JSON.stringify(other)) throw Error('reset changed another skin');
       const variant = manager.options['api-two-check'].variant; manager.select.value = 'api-two-check'; manager.showDetails(); await manager.resetParameters('api-two-check');
       if (manager.current !== 'test-skin' || manager.options['api-two-check'].variant !== variant || Object.keys(manager.options['api-two-check'].parameters).length) throw Error('resetting inactive skin changed current skin or variant');
@@ -208,7 +208,7 @@ app.whenReady().then(async () => {
       const manager = window.themeManager; manager.drafts['test-skin'].parameters = { 'panel-width': 480 }; await manager.use('test-skin');
       const confirm = window.confirm; window.confirm = () => true;
       try { manager.select.value = 'test-skin'; await manager.remove(); } finally { window.confirm = confirm; }
-      if (manager.records.has('test-skin') || manager.options['test-skin'] || manager.drafts['test-skin'] || JSON.parse(localStorage.getItem('rpe-next-editor-skin-options-v1'))['test-skin']) throw Error('deleted skin retained saved appearance or draft');
+      if (manager.records.has('test-skin') || manager.options['test-skin'] || manager.drafts['test-skin'] || JSON.parse(localStorage.getItem('vibephi-editor-skin-options-v1'))['test-skin']) throw Error('deleted skin retained saved appearance or draft');
       if (manager.current !== 'default') throw Error('removing active skin did not restore default');
       return true;
     });
@@ -217,11 +217,11 @@ app.whenReady().then(async () => {
     await run(async () => {
       const manager = window.themeManager; await manager.use('test-skin');
       if (manager.runtime.prepared.record.skin.tokens['param-panel-width'] !== '350px' || Object.keys(manager.options['test-skin'].parameters).length) throw Error('reimport restored deleted parameter values');
-      const options = JSON.parse(localStorage.getItem('rpe-next-editor-skin-options-v1')); options['orphaned-skin'] = { variant: 'base', parameters: { accent: '#654321' } }; localStorage.setItem('rpe-next-editor-skin-options-v1', JSON.stringify(options));
+      const options = JSON.parse(localStorage.getItem('vibephi-editor-skin-options-v1')); options['orphaned-skin'] = { variant: 'base', parameters: { accent: '#654321' } }; localStorage.setItem('vibephi-editor-skin-options-v1', JSON.stringify(options));
     });
     const defaultUiSnapshot = await run(() => window.defaultUi);
     await win.reload(); await until(() => document.documentElement.dataset.editorSkin === 'test-skin');
-    assert.equal(await run(() => Object.hasOwn(JSON.parse(localStorage.getItem('rpe-next-editor-skin-options-v1')), 'orphaned-skin')), false);
+    assert.equal(await run(() => Object.hasOwn(JSON.parse(localStorage.getItem('vibephi-editor-skin-options-v1')), 'orphaned-skin')), false);
     await run(async defaults => {
       window.defaultUi = defaults;
       const { EditorSkins } = await import('./src/ui/editor-skins.mjs'); const importFiles = EditorSkins.prototype.importFiles;
@@ -266,7 +266,7 @@ app.whenReady().then(async () => {
     win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'F12', modifiers: ['control', 'alt', 'shift'] });
     await until(() => !document.documentElement.dataset.editorSkin);
     assert.deepEqual(errors, []);
-    await run(() => localStorage.setItem('rpe-next-active-editor-skin-v1', 'missing-test-skin')); await win.reload();
+    await run(() => localStorage.setItem('vibephi-active-editor-skin-v1', 'missing-test-skin')); await win.reload();
     await until(() => document.querySelector('#editor-skin-settings [role=status]')?.textContent.includes('找不到已保存的皮肤'));
     assert.equal(await run(() => document.documentElement.hasAttribute('data-editor-skin')), false);
     console.log(JSON.stringify({ applied, builtinInkline, extra, api2, parameterReset, parameterResetHotkey: true, deleteClearsAppearance: deletion, reimportDefaults: true, orphanedPreferencesCleaned: true, missingSkinWarning: true, previewTimeout: true, restoredOnStartup: true, widths: [1440, 1000, 600], resetHotkey: true, errors }, null, 2)); win.destroy(); app.exit(0);

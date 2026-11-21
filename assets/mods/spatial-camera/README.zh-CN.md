@@ -38,7 +38,7 @@ screenY = height/2 - v*f/d*s
 事件保存于 Next 的 `globalEvents.version=1`，类型 ID 为 `spatial-camera/position`、`spatial-camera/rotation`、`spatial-camera/lens`；列 ID 分别为 x/y/z、yaw/pitch/roll、fov。标准 `startTime/endTime/start/end/easingType` 等字段沿用全局事件协议。来源自动记录：
 
 ```json
-{"kind":"mod","id":"spatial-camera","name":"三维摄像机","author":"rpe-next","version":"1.0.0"}
+{"kind":"mod","id":"spatial-camera","name":"三维摄像机","author":"vibephi","version":"1.0.0"}
 ```
 
 每谱面选项位于 `globalEvents.types["spatial-camera/lens"].settings.followChart`，布尔值，缺省为 false。仅修改该选项也会写入包含来源和空 fov 列的 lens 类型，保证 Next JSON/PEZ 保存、停用保留及原 RPE 导出提示一致；后续生成镜头事件保留这个设置。谱面格式版本沿用全局事件的最低值 240。

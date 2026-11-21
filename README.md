@@ -1,10 +1,10 @@
-# Re:PhiEdit Next
+# VibePhi
 
 作者：**cmdysj**。本项目是在原 **Re:PhiEdit（RPE）** 项目基础上，使用 **AI（GPT）** 进行的重构，是 Phigros 的非官方制谱器。
 
 > **关于本分支的二次重构**：本界面与交互由 **yexiwen289** 使用 **WorkBuddy** 在 **cmdysj 上述重构版本的基础上**再次重构而成（暗色主题、AI 工作台为主界面、全幅预览与编辑视图等）。谱面格式、编辑器核心与原项目归属仍归原 **Re:PhiEdit** 与 **cmdysj** 的重构版所有；原作者的署名、版权与许可证保持不变。
 
-[原项目在线使用](https://kclg-ysj.github.io/rpe-next/) · [原项目源码](https://github.com/kclg-YSJ/rpe-next)
+[原项目在线使用](https://kclg-ysj.github.io/vibephi/) · [原项目源码](https://github.com/kclg-YSJ/vibephi)
 
 当前版本：**0.13.0**。
 
@@ -92,7 +92,7 @@ Windows 也可双击 `start.cmd`。无需安装 npm 依赖。默认打开 `http:
 
 桌面包内置 Electron 运行环境，无需另装 Node.js 或浏览器。发布页提供 Windows、macOS、Linux 的 x64 / ARM64 桌面包；Windows 使用 ZIP，macOS 使用 DMG，Linux 使用 tar.xz。Windows 解压后运行 `RePhiEdit-Next.exe`，macOS 将应用拖入 Applications，Linux 解压后运行 `RePhiEdit-Next`。
 
-桌面版采用原生文件存储，默认谱面库位于系统“文档”目录的 `RePhiEdit Next/Library`；实际路径可在“设置 → 本地存储与外部备份”查看、打开和迁移。项目、恢复记录、皮肤、模组与设置写入库内，音乐、曲绘等资源按内容去重。`%APPDATA%\rpe-next-desktop` 保留桌面运行配置、缓存和库位置指针。桌面与网页版谱面库独立，可用 PEZ 转移项目。
+桌面版采用原生文件存储，默认谱面库位于系统“文档”目录的 `VibePhi/Library`；实际路径可在“设置 → 本地存储与外部备份”查看、打开和迁移。项目、恢复记录、皮肤、模组与设置写入库内，音乐、曲绘等资源按内容去重。`%APPDATA%\rpe-next-desktop` 保留桌面运行配置、缓存和库位置指针。桌面与网页版谱面库独立，可用 PEZ 转移项目。
 
 同一 Windows 用户更新或移动桌面程序后会自动继承原有设置和谱面库，无需复制设置到新程序目录；“谱面信息 → 打开谱面所在文件夹”可打开当前已保存项目的存档文件夹。
 

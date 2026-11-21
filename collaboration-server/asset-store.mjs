@@ -22,7 +22,7 @@ async function body(request, limit, progress = () => {}) {
 }
 
 export class CollaborationAssetStore {
-  static async create(options) { return new CollaborationAssetStore(await mkdtemp(join(tmpdir(), 'rpe-next-media-')), options); }
+  static async create(options) { return new CollaborationAssetStore(await mkdtemp(join(tmpdir(), 'vibephi-media-')), options); }
   constructor(root, { onDiagnostic = () => {}, onUploadProgress = () => {} } = {}) {
     this.root = root; this.rooms = new Map(); this.tasks = new Set(); this.active = 0; this.closed = false;
     this.onDiagnostic = onDiagnostic; this.onUploadProgress = onUploadProgress;

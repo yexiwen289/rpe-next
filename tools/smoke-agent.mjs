@@ -35,7 +35,7 @@ export async function smokeAgent(contents, { userData, phase = 'save' }) {
       dialog.querySelector('input[type=password]').value = 'unsaved-test-value'; dialog.querySelector('.agent-heading button').click(); dialog = await open(); check(dialog.querySelector('input[type=password]').value === '', 'Closing configuration saved unsubmitted key');
       dialog.querySelector('.agent-heading button').click(); checks.push('disable remember deletes stored key but retains session value; clear removes both saved and session values; cancel preserves saved state');
     }
-    check(!localPreferences.getItem('rpe-next-agent-v1').includes(fixture) && !JSON.stringify(localStorage).includes(fixture), 'Credential leaked to normal preferences');
+    check(!localPreferences.getItem('vibephi-agent-v1').includes(fixture) && !JSON.stringify(localStorage).includes(fixture), 'Credential leaked to normal preferences');
     const inspected = await editor.agent.commands.execute('ui_inspect', {}, { permission: 'full' }); check(!JSON.stringify(inspected).includes(fixture), 'Credential leaked through editor tools');
     check(typeof require === 'undefined' && Boolean(window.rpenAgentCredentials), 'Sandbox or credential bridge missing');
     await window.rpenFlushPreferences?.(); return { phase: ${JSON.stringify(phase)}, checks, noNode: typeof require === 'undefined', keyExcludedFromPreferences: true };

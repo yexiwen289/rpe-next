@@ -25,7 +25,7 @@ test('模组包按清单与 ES 模块语法校验，ZIP 与文件夹可导入导
   for(const mutation of [source=>source.set('../a',encode('x')),source=>source.delete('main.mjs'),source=>source.set('main.mjs',encode('export {')),source=>source.set('mod.json',encode({...manifest(),id:'Bad ID'})),source=>source.set('mod.json',encode({...manifest(),api:999}))]){const source=fixture();mutation(source);assert.throws(()=>parseModPackage(source));}
 });
 test('模块改写使用语法树，保留注释字符串模板，支持循环、多文件、动态导入和核心模块',()=>{
-  const files=new Map([['main.mjs',encode('')],['sub/a.mjs',encode('')],['sub/b.mjs',encode('')],['data.json',encode('{}')]]);const base='https://example.com/rpe-next/';const prefix='@rpen-mod/test/';
+  const files=new Map([['main.mjs',encode('')],['sub/a.mjs',encode('')],['sub/b.mjs',encode('')],['data.json',encode('{}')]]);const base='https://example.com/vibephi/';const prefix='@rpen-mod/test/';
   const resolve=(value,from)=>resolveModImport(value,from,files,prefix,base);
   const source=`// import './fake.mjs'\nconst message="import('./fake.mjs')";\nimport {a} from './a.mjs';export {b} from './b.mjs';\nconst file='./b.mjs';export const lazy=()=>import(file);const direct=import('../data.json');const url=import.meta.resolve('./a.mjs');`;
   const transformed=rewriteModModule(source,'sub/a.mjs',resolve,'test-load');parseJavaScript(transformed,{ecmaVersion:'latest',sourceType:'module'});

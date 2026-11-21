@@ -108,7 +108,7 @@ export function showHotkeySettings(preferences, save) {
     } catch (error) { feedback.textContent = t('hotkey-settings.s6ba4e41', { p0: error.message }); }
     finally { file.value = ''; }
   };
-  exportButton.onclick = () => download(new Blob([JSON.stringify({ ...preferences, hotkeys: draft, originalHotkeys: { ...preferences.originalHotkeys, ...draft } }, null, 2)], { type: 'application/json' }), 'rpe-next-preferences.json');
+  exportButton.onclick = () => download(new Blob([JSON.stringify({ ...preferences, hotkeys: draft, originalHotkeys: { ...preferences.originalHotkeys, ...draft } }, null, 2)], { type: 'application/json' }), 'vibephi-preferences.json');
   apply.onclick = async () => {
     const validation = validateHotkeys(draft); if (!validation.valid || busy) return;
     stopRecording(); busy = true; toolbar.inert = list.inert = true; refresh();

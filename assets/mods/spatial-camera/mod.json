@@ -7,7 +7,7 @@
     "en-US": "Spatial Camera"
   },
   "version": "1.0.0",
-  "author": "rpe-next",
+  "author": "vibephi",
   "description": {
     "zh-CN": "用全局事件控制摄像机 X/Y/Z、偏航、俯仰、画面倾斜和视角。提供拖拽取样与姿态过渡助手，支持缓动、撤销和 Next 谱面保存；可选择让游戏 UI 与背景跟随谱面。",
     "en-US": "Drive camera X/Y/Z, yaw, pitch, roll and field of view with global events. Includes drag sampling and a pose transition helper with easing, undo and Next chart saving; the game UI and background can follow the chart optionally."

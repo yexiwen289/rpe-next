@@ -308,7 +308,7 @@ test('标签与仓库包导入导出', async () => {
   const first = await initial(repo, chartNamed('A'));
   await repo.createTag('v1', first.commit.id, '第一版');
   const bundle = await repo.exportBundle();
-  assert.equal(bundle.format, 'rpe-next-chart-vcs');
+  assert.equal(bundle.format, 'vibephi-chart-vcs');
   assert.ok(bundle.blobs.length >= 1);
   const target = makeRepo(store, 'repo-2');
   await target.init();

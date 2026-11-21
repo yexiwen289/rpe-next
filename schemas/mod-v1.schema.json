@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "RPEN executable mod API 1 manifest",
+  "title": "VibePhi executable mod API 1 manifest",
   "type": "object",
   "required": [
     "protocol",
@@ -12,7 +12,7 @@
     "description",
     "entry"
   ],
-  "description": "Structural validation only; RPEN also validates paths, package files, JS syntax and setting defaults. Imports run with full editor page authority after explicit consent and activation.",
+  "description": "Structural validation only; VibePhi also validates paths, package files, JS syntax and setting defaults. Imports run with full editor page authority after explicit consent and activation.",
   "properties": {
     "protocol": {
       "const": "rpen-mod"

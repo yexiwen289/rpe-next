@@ -22,6 +22,6 @@ export function normalizeEditorPreferences(value) {
   return result;
 }
 export function readEditorPreferences(storage = localPreferences) {
-  try { return normalizeEditorPreferences(JSON.parse(storage.getItem('rpe-next-editor-v1') ?? '{}')); } catch { return {}; }
+  try { return normalizeEditorPreferences(JSON.parse(storage.getItem('vibephi-editor-v1') ?? '{}')); } catch { return {}; }
 }
-export function writeEditorPreferences(value, storage = localPreferences) { storage.setItem('rpe-next-editor-v1', JSON.stringify(normalizeEditorPreferences(value))); }
+export function writeEditorPreferences(value, storage = localPreferences) { storage.setItem('vibephi-editor-v1', JSON.stringify(normalizeEditorPreferences(value))); }

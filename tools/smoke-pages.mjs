@@ -7,7 +7,7 @@ import { AgentSourceIndex } from '../src/core/agent-source.mjs';
 
 const root = new URL('../dist/', import.meta.url);
 const entries = await readdir(root, { recursive: true, withFileTypes: true });
-const site = new URL('https://example.com/rpe-next/');
+const site = new URL('https://example.com/vibephi/');
 const names = new Set(entries.filter(entry => entry.isFile()).map(entry => relative(fileURLToPath(root), join(entry.parentPath, entry.name)).replaceAll('\\', '/')));
 assert.ok(names.has('LICENSE') && names.has('NOTICE') && names.has('.nojekyll'));
 for(const protocol of ['EDITOR-SKIN','MOD','GLOBAL-EVENTS','AI-AGENT'])assert.ok(names.has(`protocols/${protocol}-PROTOCOL.zh-CN.md`));
@@ -40,4 +40,4 @@ for (const name of names) {
   const expressions = name.endsWith('.html') ? [/(?:src|href)="([^"#]+)"/g] : [/url\(['"]?([^'"\)]+)['"]?\)/g];
   for (const expression of expressions) for (const match of source.matchAll(expression)) checkReference(match[1], name);
 }
-console.log(`Pages artifact verified: ${names.size} allowed files; module, HTML and CSS references stay under /rpe-next/.`);
+console.log(`Pages artifact verified: ${names.size} allowed files; module, HTML and CSS references stay under /vibephi/.`);

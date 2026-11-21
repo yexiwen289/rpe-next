@@ -3,7 +3,7 @@
 import { DEFAULT_LANGUAGE, RPE_LANGUAGE_TAGS } from '../core/locales.mjs';
 import { localPreferences } from './local-preferences.mjs';
 
-export const LOCALE_STORAGE_KEY = 'rpe-next-locale-v1';
+export const LOCALE_STORAGE_KEY = 'vibephi-locale-v1';
 
 // Returns the language recorded for the editor: an explicit choice first, then
 // the language of migrated RPE settings, or an empty string when unset.

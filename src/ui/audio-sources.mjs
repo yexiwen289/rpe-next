@@ -12,7 +12,7 @@ const node = (tag, text = '', className = '') => { const element = document.crea
 export class AudioSourcesPanel {
   constructor(sources, notify = () => {}, onsets) {
     this.sources = sources; this.notify = notify; this.host = node('div', '', 'audio-sources-panel');
-    try { this.options = JSON.parse(localPreferences.getItem('rpe-next-audio-separation-v1') ?? '{}'); } catch { this.options = {}; }
+    try { this.options = JSON.parse(localPreferences.getItem('vibephi-audio-separation-v1') ?? '{}'); } catch { this.options = {}; }
     if (onsets) this.onsetPanel = new AudioOnsetsPanel(onsets, sources, notify);
     sources.addEventListener('change', () => this.render()); sources.addEventListener('progress', () => this.progress()); this.render();
     sources.separator.bridge?.onProgress(value => {
@@ -50,7 +50,7 @@ export class AudioSourcesPanel {
     }
     finally { this.configuring = false; this.render(); }
   }
-  saveOptions() { localPreferences.setItem('rpe-next-audio-separation-v1', JSON.stringify(this.options)); }
+  saveOptions() { localPreferences.setItem('vibephi-audio-separation-v1', JSON.stringify(this.options)); }
   button(text, task) { const button = node('button', text); button.type = 'button'; button.onclick = () => this.action(task); return button; }
   render() {
     const sources = this.sources, entries = sources.list(), desktop = Boolean(sources.separator.bridge); this.host.replaceChildren(); this.host.append(node('h3', t('audio-sources.s5fbf022')));

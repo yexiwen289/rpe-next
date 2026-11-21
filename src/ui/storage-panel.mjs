@@ -8,8 +8,8 @@ import { showDialog } from './dialog.mjs';
 import { nativeStorage, nativeList } from '../platform/native.mjs';
 import { t } from '../i18n.mjs';
 
-const BACKUP_KEY = 'rpe-next-external-backup-v1';
-const FIRST_SAVE_KEY = 'rpe-next-first-library-save-v1';
+const BACKUP_KEY = 'vibephi-external-backup-v1';
+const FIRST_SAVE_KEY = 'vibephi-first-library-save-v1';
 export function noteExternalBackup() { try { localPreferences.setItem(BACKUP_KEY, String(Date.now())); } catch {} }
 export function noteLibrarySave() { try { if (!localPreferences.getItem(FIRST_SAVE_KEY)) localPreferences.setItem(FIRST_SAVE_KEY, String(Date.now())); } catch {} }
 const bytes = value => Number.isFinite(value) ? `${(value / 1024 ** 2).toFixed(1)} MiB` : t('storage-panel.sd9c32a4');
@@ -111,7 +111,7 @@ export class StoragePanel {
   }
   async exportAll() {
     const result = await exportLibrary({ ...this.fileOptions(), progress: (index, count, name) => { this.status.textContent = t('storage-panel.sb2303fe', { p0: index, p1: count, p2: name ? '：' + name : '' }); } });
-    download(result.blob, `rpe-next-library-${new Date().toISOString().slice(0, 10)}.zip`);
+    download(result.blob, `vibephi-library-${new Date().toISOString().slice(0, 10)}.zip`);
     noteExternalBackup(); this.notify(t('storage-panel.s83a6407', { p0: result.count }), 'success', 7000); await this.refresh();
   }
   async manageRecovery() {

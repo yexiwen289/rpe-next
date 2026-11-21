@@ -29,7 +29,7 @@ test('三套工具整体迁移模型和各类缓存，校验后清理原副本�
   const { root, roots, parent, config, storage, services, originals } = await fixture(context), result = await storage.migrate(parent);
   assert.equal(result.migrating, false); assert.equal(result.warnings.length, 0); assert.equal(result.files, 15); assert.ok(result.bytes > 0);
   for (const [id, service] of Object.entries(services)) {
-    const next = join(parent, 'RPEN-Audio', 'audio-' + id); assert.equal(service.dataRoot, next); assert.equal(service.root, roots[id]);
+    const next = join(parent, 'VibePhi-Audio', 'audio-' + id); assert.equal(service.dataRoot, next); assert.equal(service.root, roots[id]);
     assert.equal(await service.configuredPython(), process.execPath); assert.equal(service.results.get('existing'), join(next, 'cache', 'example'));
     const env = service.environment(); assert.equal(env.TORCH_HOME, join(next, 'models', 'torch')); assert.equal(env.HF_HOME, join(next, 'models', 'huggingface'));
     for (const key of ['TEMP', 'TMP', 'TMPDIR', 'PIP_CACHE_DIR', 'TORCHINDUCTOR_CACHE_DIR', 'CUDA_CACHE_PATH', 'XDG_CACHE_HOME']) assert.ok(env[key].startsWith(next));
@@ -41,7 +41,7 @@ test('三套工具整体迁移模型和各类缓存，校验后清理原副本�
   }
   const resumed = await new AudioStorage(config, roots).initialize(); assert.equal(resumed.error, undefined); assert.deepEqual(resumed.paths, storage.paths); assert.equal(resumed.warnings.length, 0);
   const second = join(root, 'another destination'); await mkdir(second); await resumed.migrate(second);
-  assert.equal(await readFile(join(second, 'RPEN-Audio', 'audio-mapper', 'models', '中文模型.bin'), 'utf8'), originals.get(join(roots.mapper, 'models', '中文模型.bin')).toString());
+  assert.equal(await readFile(join(second, 'VibePhi-Audio', 'audio-mapper', 'models', '中文模型.bin'), 'utf8'), originals.get(join(roots.mapper, 'models', '中文模型.bin')).toString());
 });
 
 test('迁移后已有声部句柄仍可读取，新任务写入新目录，结果仍可持久复用', async context => {
@@ -75,11 +75,11 @@ test('任务、安装、未完成请求和迁移互斥，禁止在目录切换�
 
 test('空间不足、目录重叠和已有目标均不改写配置、不覆盖文件、不删除源文件', async context => {
   const { storage, roots, parent, config } = await fixture(context, { availableSpace: async () => 1n });
-  await assert.rejects(storage.migrate(parent), /空间不足/); await assert.rejects(lstat(join(parent, 'RPEN-Audio')), { code: 'ENOENT' });
+  await assert.rejects(storage.migrate(parent), /空间不足/); await assert.rejects(lstat(join(parent, 'VibePhi-Audio')), { code: 'ENOENT' });
   storage.availableSpace = async () => 1024n ** 4n;
   await assert.rejects(storage.migrate(roots.separation), /相互包含/);
-  await mkdir(join(parent, 'RPEN-Audio')); await writeFile(join(parent, 'RPEN-Audio', 'keep.txt'), 'do not overwrite');
-  await assert.rejects(storage.migrate(parent), /不会覆盖/); assert.equal(await readFile(join(parent, 'RPEN-Audio', 'keep.txt'), 'utf8'), 'do not overwrite');
+  await mkdir(join(parent, 'VibePhi-Audio')); await writeFile(join(parent, 'VibePhi-Audio', 'keep.txt'), 'do not overwrite');
+  await assert.rejects(storage.migrate(parent), /不会覆盖/); assert.equal(await readFile(join(parent, 'VibePhi-Audio', 'keep.txt'), 'utf8'), 'do not overwrite');
   await assert.rejects(readFile(config), { code: 'ENOENT' }); assert.equal((await readFile(join(roots.separation, 'models', '中文模型.bin'))).length, 2048);
 });
 
@@ -110,14 +110,14 @@ test('拒绝目录链接和越界文件链接，允许模型目录内的文件�
   try { await symlink(join(external, 'secret'), join(roots.separation, 'models', 'outside.bin'), 'file'); } catch (error) { if (error.code === 'EPERM') { context.diagnostic('本机未授予文件符号链接权限；目录链接拦截已验证'); return; } throw error; }
   await assert.rejects(storage.migrate(parent), /链接/); await rm(join(roots.separation, 'models', 'outside.bin'));
   const target = join(roots.separation, 'models', '中文模型.bin'), link = join(roots.separation, 'models', 'snapshot.bin'); await symlink(relative(join(link, '..'), target), link, 'file');
-  await storage.migrate(parent); const copied = join(parent, 'RPEN-Audio', 'audio-separation', 'models', 'snapshot.bin');
+  await storage.migrate(parent); const copied = join(parent, 'VibePhi-Audio', 'audio-separation', 'models', 'snapshot.bin');
   assert.equal((await lstat(copied)).isSymbolicLink(), false); assert.equal((await readFile(copied)).length, 2048);
 });
 
 test('迁移目录丢失或被替换时阻止写入，不静默回到系统盘', async context => {
   const { storage, roots, config, parent } = await fixture(context); await storage.migrate(parent);
-  await rename(join(parent, 'RPEN-Audio'), join(parent, 'RPEN-Audio-unavailable'));
-  const resumed = await new AudioStorage(config, roots).initialize(); assert.match(resumed.error, /目录不可用/); assert.equal(resumed.paths.separation, join(parent, 'RPEN-Audio', 'audio-separation'));
+  await rename(join(parent, 'VibePhi-Audio'), join(parent, 'VibePhi-Audio-unavailable'));
+  const resumed = await new AudioStorage(config, roots).initialize(); assert.match(resumed.error, /目录不可用/); assert.equal(resumed.paths.separation, join(parent, 'VibePhi-Audio', 'audio-separation'));
   await assert.rejects(resumed.access(() => {}), /目录不可用/); await assert.rejects(lstat(join(roots.separation, 'cache')), { code: 'ENOENT' });
 });
 
@@ -131,7 +131,7 @@ test('存储 IPC 只接受当前窗口主框架，路径来自原生选择，取
   assert.equal((await handle({ action: 'open', id: 'separation', kind: 'models' })).ok, true); assert.equal(opened.length, 1);
   canceled = true; assert.equal((await handle({ action: 'migrate' })).result, null); canceled = false;
   assert.equal((await handle({ action: 'migrate' })).result, null); response = 0;
-  assert.equal((await handle({ action: 'migrate', path: '/ignored' })).ok, true); assert.equal(storage.location, join(parent, 'RPEN-Audio'));
+  assert.equal((await handle({ action: 'migrate', path: '/ignored' })).ok, true); assert.equal(storage.location, join(parent, 'VibePhi-Audio'));
 });
 
 test('音频 IPC 操作全程占用共享锁，迁移时所有后端拒绝启动任务', async context => {
@@ -170,13 +170,13 @@ test('首次选择将尚未安装的环境也放在所选目录，重启与后�
   for (const location of Object.values(roots)) { await rm(join(location, 'runtime'), { recursive: true }); await rm(join(location, 'config.json')); }
   const bridge = storageBridge(storage, parent); assert.equal((await bridge.call('prepare')).result, true);
   for (const [id, service] of Object.entries(services)) {
-    assert.equal(service.root, join(parent, 'RPEN-Audio', 'audio-' + id)); await service.configure(process.execPath);
+    assert.equal(service.root, join(parent, 'VibePhi-Audio', 'audio-' + id)); await service.configure(process.execPath);
     await assert.rejects(readFile(join(roots[id], 'config.json')), { code: 'ENOENT' });
     assert.equal(JSON.parse(await readFile(join(service.root, 'config.json'), 'utf8')).python, process.execPath);
   }
   const resumed = await new AudioStorage(config, roots).initialize(); assert.equal(resumed.status().needsSetup, false); assert.deepEqual(resumed.roots, storage.roots);
   const second = join(root, 'later-cache-location'); await mkdir(second); await resumed.migrate(second);
-  const restored = await new AudioStorage(config, roots).initialize(); assert.deepEqual(restored.roots, storage.roots); assert.equal(restored.paths.separation, join(second, 'RPEN-Audio', 'audio-separation'));
+  const restored = await new AudioStorage(config, roots).initialize(); assert.deepEqual(restored.roots, storage.roots); assert.equal(restored.paths.separation, join(second, 'VibePhi-Audio', 'audio-separation'));
 });
 
 test('首次位置设置保留已安装环境和外部 Python 路径，原有迁移配置不重复引导', async context => {

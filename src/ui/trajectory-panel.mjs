@@ -11,7 +11,7 @@ import { trajectorySplitSettings } from '../core/trajectory-simplify.mjs';
 import { parseCurvePreset, saveCurvePreset, deleteCurvePreset, copyCurvePreset } from '../core/trajectory-presets.mjs';
 import { t } from '../i18n.mjs';
 
-const STORAGE_KEY = 'rpe-next-trajectory-presets-v1';
+const STORAGE_KEY = 'vibephi-trajectory-presets-v1';
 const COMMON_FIELDS = [
   ['trimStart', t('trajectory-panel.s7c203c4'), 'number', 0, 1, 0.01], ['trimEnd', t('trajectory-panel.s9ce7cd3'), 'number', 0, 1, 0.01],
   ['rotation', t('trajectory-panel.sb23ce41'), 'number', -3600, 3600, 1],

@@ -1,6 +1,6 @@
 import { localPreferences } from '../platform/local-preferences.mjs';
 import { t } from '../i18n.mjs';
-const storageKey = 'rpe-next-multi-edit-v1';
+const storageKey = 'vibephi-multi-edit-v1';
 const kinds = ['notes', 'events'];
 
 export function defaultBatchParameters(kind) {

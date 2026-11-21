@@ -14,7 +14,7 @@ const messages = {
   failed: ['操作未完成', 'Operation failed'],
   rolledBack: ['安装未完成，已恢复原版本', 'Installation failed. Previous versions have been restored.'],
   installFailed: ['安装未完成', 'Installation failed'],
-  title: ['OpenRPEN · 模组市场', 'OpenRPEN · Mod market'],
+  title: ['OpenVibePhi · 模组市场', 'OpenVibePhi · Mod market'],
   search: ['搜索模组', 'Search mods'],
   allCategories: ['全部类别', 'All categories'],
   allMods: ['全部模组', 'All mods'],

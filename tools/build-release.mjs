@@ -20,9 +20,9 @@ const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, enc
 const sourcePaths = kind === 'server' ? SERVER_PACKAGE_SOURCES : EDITOR_PACKAGE_SOURCES;
 execFileSync('git', ['diff', '--exit-code', 'HEAD', '--', 'package.json', ...sourcePaths], { cwd: root, stdio: 'pipe' });
 const platformName = { win32: 'windows', darwin: 'macos', linux: 'linux' }[platform];
-const product = kind === 'server' ? 'RePhiEdit Collaboration Server' : 'RePhiEdit Next';
+const product = kind === 'server' ? 'RePhiEdit Collaboration Server' : 'VibePhi';
 const executableName = kind === 'server' ? 'RPE-Collaboration-Server' : 'RePhiEdit-Next';
-const stem = 'rpe-next-' + (kind === 'server' ? 'collaboration-server-' : '') + metadata.version + '-' + platformName + '-' + arch;
+const stem = 'vibephi-' + (kind === 'server' ? 'collaboration-server-' : '') + metadata.version + '-' + platformName + '-' + arch;
 const output = join(root, 'release', 'v' + metadata.version);
 const work = join(root, 'release', '.build-' + platform + '-' + arch + '-' + kind + '-' + sourceCommit.slice(0, 8)), stage = join(work, 'source');
 const packageFolder = join(work, 'packages');
@@ -39,7 +39,7 @@ if (kind === 'server') {
   await writeFile(join(stage, 'collaboration-server/package.json'), JSON.stringify({ type: 'module', version: metadata.version, dependencies: { ws: '8.22.0' } }));
 }
 await writeFile(join(stage, 'package.json'), JSON.stringify({
-  name: kind === 'server' ? 'rpe-next-collaboration-server' : metadata.name,
+  name: kind === 'server' ? 'vibephi-collaboration-server' : metadata.name,
   version: metadata.version, description: metadata.description, author: metadata.author, license: metadata.license,
   main: kind === 'server' ? 'collaboration-server/manager.cjs' : 'desktop/main.cjs', type: 'module'
 }, null, 2) + '\n');
@@ -86,7 +86,7 @@ function run(program, args, options = {}) {
 const packaged = await packager({
   dir: stage, out: packageFolder, name: product, executableName, platform, arch,
   electronVersion: metadata.devDependencies.electron, appVersion: metadata.version,
-  appBundleId: kind === 'server' ? 'io.github.kclg-ysj.rpe-next.server' : 'io.github.kclg-ysj.rpe-next',
+  appBundleId: kind === 'server' ? 'io.github.kclg-ysj.vibephi.server' : 'io.github.kclg-ysj.vibephi',
   appCopyright: 'Copyright 2026 cmdysj', prune: false, asar: false, overwrite: false,
   darwinDarkModeSupport: true,
   ...(platform === 'darwin' ? { osxSign: { identity: '-', identityValidation: false, continueOnError: false } } : {}),
@@ -117,8 +117,8 @@ const help = [
   'macOS 首次打开可在“系统设置 → 隐私与安全性”中允许此应用。',
   'Linux 需在桌面会话中运行；请以普通用户启动。',
   '', '许可：PolyForm Noncommercial 1.0.0。程序及第三方许可随包保留。',
-  '在线版：https://kclg-ysj.github.io/rpe-next/',
-  '源码：https://github.com/kclg-YSJ/rpe-next',
+  '在线版：https://kclg-ysj.github.io/vibephi/',
+  '源码：https://github.com/kclg-YSJ/vibephi',
   'Source commit: ' + sourceCommit, ''
 ].join('\n');
 await mkdir(output, { recursive: true });

@@ -25,25 +25,25 @@ export async function prepareNative(contents) {
     const canvas = document.createElement('canvas'); canvas.width = canvas.height = 16; canvas.getContext('2d').fillRect(0, 0, 16, 16);
     const cover = await new Promise(resolve => canvas.toBlob(resolve));
     const music = new Uint8Array(4 * 1024 * 1024); music[123] = 42;
-    await put('rpe-next-library', [['projects', true], ['summaries', true], ['revisions', true], ['preferences', false]], [
+    await put('vibephi-library', [['projects', true], ['summaries', true], ['revisions', true], ['preferences', false]], [
       ['projects', { id: 'native-migration-project', chart, chartName: 'chart.json', assets: [['music.bin', new Blob([music])], ['cover.png', new Uint8Array(await cover.arrayBuffer())]], imported: Date.now() }],
       ['summaries', { id: 'native-migration-project', thumbnail: cover }],
       ['preferences', { marker: 'library-preferences' }, 'current'],
     ]);
-    await put('rpe-next-recovery', [['drafts', true]], [['drafts', { id: 'native-migration-draft', projectId: 'native-migration-project', name: 'draft', chart, assets: [['music.bin', new Blob([music])]], updated: Date.now() }]]);
+    await put('vibephi-recovery', [['drafts', true]], [['drafts', { id: 'native-migration-draft', projectId: 'native-migration-project', name: 'draft', chart, assets: [['music.bin', new Blob([music])]], updated: Date.now() }]]);
     const skin = (await builtinEditorSkins())[0];
     const files = new Map(skin.files), manifest = JSON.parse(new TextDecoder().decode(files.get('skin.json'))); manifest.id = 'native-migration-skin'; manifest.name = 'Native Migration Skin';
     files.set('skin.json', new TextEncoder().encode(JSON.stringify(manifest)));
-    await put('rpe-next-editor-skins', [['packages', true]], [['packages', { id: manifest.id, files: [...files] }]]);
+    await put('vibephi-editor-skins', [['packages', true]], [['packages', { id: manifest.id, files: [...files] }]]);
     const mod = (await builtinMods())[0], modFiles = new Map(mod.files), modManifest = JSON.parse(new TextDecoder().decode(modFiles.get('mod.json'))); modManifest.id = 'native-migration-mod';
     modFiles.set('mod.json', new TextEncoder().encode(JSON.stringify(modManifest)));
-    await put('rpe-next-mods', [['packages', true]], [['packages', { id: modManifest.id, files: [...modFiles] }]]);
+    await put('vibephi-mods', [['packages', true]], [['packages', { id: modManifest.id, files: [...modFiles] }]]);
     // The package store must preserve arbitrary package data, including original files.
     const { NOTE_SKIN_IMAGES } = await import('/src/core/note-skin.mjs');
     const png = new Uint8Array(await cover.arrayBuffer());
     const noteFiles = [['info.yml', new TextEncoder().encode('name: Native Note Test\nauthor: Test\nhitFx: [1, 1]\nholdAtlas: [4, 4]\nholdAtlasMH: [4, 4]\n')], ...NOTE_SKIN_IMAGES.map(name => [name, png])];
-    await put('rpe-next-note-skins', [['packages', true]], [['packages', { id: 'pack-123456789012345678901234', files: noteFiles, originalFiles: [...noteFiles, ['marker', new Uint8Array([9])]] }]]);
-    localStorage.setItem('rpe-next-editor-v1', JSON.stringify({ lineScale: 2.3, judgementColor: '#fedcba' }));
+    await put('vibephi-note-skins', [['packages', true]], [['packages', { id: 'pack-123456789012345678901234', files: noteFiles, originalFiles: [...noteFiles, ['marker', new Uint8Array([9])]] }]]);
+    localStorage.setItem('vibephi-editor-v1', JSON.stringify({ lineScale: 2.3, judgementColor: '#fedcba' }));
     localStorage.setItem('rpe-collab-name', 'Native Tester');
   });
 }
@@ -76,7 +76,7 @@ export async function smokeNative(contents, service, controls) {
     const project = await library.readProject('native-migration-project'), draft = await recovery.readDraft('native-migration-draft');
     const summary = (await library.listProjects()).find(item => item.id === project.id);
     const legacy = await new Promise((resolve, reject) => {
-      const request = indexedDB.open('rpe-next-library'); request.onerror = () => reject(request.error);
+      const request = indexedDB.open('vibephi-library'); request.onerror = () => reject(request.error);
       request.onsuccess = () => { const db = request.result, tx = db.transaction('projects'), read = tx.objectStore('projects').get('native-migration-project'); read.onsuccess = () => { resolve(read.result.chart.META.name); db.close(); }; };
     });
     return { name: project.chart.META.name, unknown: project.chart['x-native-test'].preserved, music: project.assets[0][1] instanceof Uint8Array && project.assets[0][1][123] === 42, draft: draft.assets[0][1][123] === 42, thumbnail: summary.thumbnail instanceof Blob && summary.thumbnail.size > 0, editorSkin: (await readEditorSkins()).some(item => item.id === 'native-migration-skin'), noteSkin: (await readNoteSkins())[0].originalFiles.find(([name]) => name === 'marker')[1][0], mod: (await readMods()).some(item => item.id === 'native-migration-mod'), prefs: (await library.readPreferences()).marker, lineScale: readEditorPreferences().lineScale, nickname: localPreferences.getItem('rpe-collab-name'), legacy };
@@ -92,7 +92,7 @@ export async function smokeNative(contents, service, controls) {
       try { await library.storeProject(project); } finally { clearInterval(timer); }
       const stale = { ...project }; await library.storeProject(project);
       let conflict = false; try { await library.storeProject(stale); } catch (error) { conflict = error.name === 'ProjectConflictError'; }
-      localPreferences.setItem('rpe-next-native-restart-test', 'persistent'); await flushLocalPreferences();
+      localPreferences.setItem('vibephi-native-restart-test', 'persistent'); await flushLocalPreferences();
       const { nativeStorage } = await import('/src/platform/native.mjs');
       const root = (await nativeStorage.call('status')).root;
       document.querySelector('#settings-modal').showModal();
@@ -153,13 +153,13 @@ export async function smokeNative(contents, service, controls) {
     checks.push('reload resumes safely without replaying stale legacy records');
     await writeFile(join(root, '..', 'native-test-complete.json'), JSON.stringify({ revision: result.revision }));
     const moved = await controls.selectFolder(join(root, '..', 'moved'), () => run(contents, async () => (await import('/src/platform/native.mjs')).nativeStorage.call('chooseRoot')));
-    assert.ok(moved.root.endsWith('RPENLibrary')); assert.ok(await readFile(join(root, 'library.json')));
+    assert.ok(moved.root.endsWith('VibePhiLibrary')); assert.ok(await readFile(join(root, 'library.json')));
     assert.equal((await controls.service().call('read', 'projects', 'native-migration-project')).data.chart.META.name, '原生存储的新版本');
     const returned = await controls.selectFolder(root, () => run(contents, async () => (await import('/src/platform/native.mjs')).nativeStorage.call('useRoot')));
     assert.equal(returned.root, root);
     checks.push('privileged folder migration switches the worker and config safely, preserves source and can reopen an existing library');
   } else {
-    assert.equal(await run(contents, async () => (await import('/src/platform/local-preferences.mjs')).localPreferences.getItem('rpe-next-native-restart-test')), 'persistent');
+    assert.equal(await run(contents, async () => (await import('/src/platform/local-preferences.mjs')).localPreferences.getItem('vibephi-native-restart-test')), 'persistent');
     checks.push('full desktop restart rereads native project and UI settings');
     assert.equal(await run(contents, () => Number(document.querySelector('#default-line-thickness').value)), 2.3);
     checks.push('editor display settings are applied automatically after starting another executable directory');

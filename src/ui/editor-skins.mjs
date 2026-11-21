@@ -8,8 +8,8 @@ import { storageFailure } from '../platform/storage.mjs';
 import { DEFAULT_APPEARANCE } from '../core/default-settings.mjs';
 import { localizedValue, t } from '../i18n.mjs';
 
-const ACTIVE_KEY = 'rpe-next-active-editor-skin-v1';
-const OPTIONS_KEY = 'rpe-next-editor-skin-options-v1';
+const ACTIVE_KEY = 'vibephi-active-editor-skin-v1';
+const OPTIONS_KEY = 'vibephi-editor-skin-options-v1';
 const action = (text, handler) => { const button = document.createElement('button'); button.type = 'button'; button.textContent = text; button.onclick = handler; return button; };
 export class EditorSkins {
   constructor(host, { invalidate, notify }) {

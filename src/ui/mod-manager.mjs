@@ -6,7 +6,7 @@ import { download } from '../platform/files.mjs';
 import { installModApi } from './mod-api.mjs';
 import { localizedValue, t } from '../i18n.mjs';
 
-const ENABLED='rpe-next-mod-enabled-v1',OPTIONS='rpe-next-mod-options-v1',BOOT='rpe-next-mod-boot-v1';
+const ENABLED='vibephi-mod-enabled-v1',OPTIONS='vibephi-mod-options-v1',BOOT='vibephi-mod-boot-v1';
 const read=(key,fallback)=>{try{return JSON.parse(localPreferences.getItem(key))??fallback;}catch{return fallback;}};
 const object=value=>value&&typeof value==='object'&&!Array.isArray(value);
 const text=(tag,value,className='')=>{const node=document.createElement(tag);node.textContent=value;node.className=className;return node;};
@@ -97,7 +97,7 @@ export class ModManager {
   }
   finishWarning(accepted){this.warning.close();this.warningResolve?.(accepted);this.warningResolve=null;}
   async importFiles(files,directory=false){if(!files?.length||this.busy)return;this.busy=true;try{const record=await importMod(files,directory);if(this.records.get(record.manifest.id)?.builtin)throw Error(t('mod-manager.se2a7877'));if(!await this.review(record))return;if(this.records.has(record.manifest.id)&&!confirm(t('mod-manager.s0f1d758')))return;await this.disable(record.manifest.id);await storeMod(record);this.records.set(record.manifest.id,record);this.selected=record.manifest.id;this.message.textContent=t('mod-manager.sc774273');this.renderList();}catch(error){this.notify(error.message,'error');this.message.textContent=error.message;}finally{this.file.value='';this.directory.value='';this.busy=false;this.renderList();}}
-  async remove(id){if(!confirm(t('mod-manager.s667ec6f')))return;await this.disable(id);await deleteMod(id);delete this.options[id];localPreferences.removeItem('rpe-next-mod-data:'+id);this.records.delete(id);this.persist();this.renderList();}
+  async remove(id){if(!confirm(t('mod-manager.s667ec6f')))return;await this.disable(id);await deleteMod(id);delete this.options[id];localPreferences.removeItem('vibephi-mod-data:'+id);this.records.delete(id);this.persist();this.renderList();}
   showProtocol(){this.details.replaceChildren(text('h3',t('mod-manager.s6ebce19')),text('p',t('mod-manager.s656efc8')),text('p',t('mod-manager.s1b4dfbd')));
     const pre=text('pre',JSON.stringify({protocol:'rpen-mod',api:1,id:'example-mod',name:t('mod-manager.s30fd4ed'),version:'1.0.0',author:t('mod-manager.s698bea5'),description:t('mod-manager.s26670dd'),entry:'main.mjs'},null,2)+t('mod-manager.s33e5ce9'),'mod-source');this.details.append(pre,text('p',t('mod-manager.scda426f'),'hint'));
     const actions=document.createElement('div');actions.className='mod-manager-toolbar';for(const [label,path]of [[t('mod-manager.sc854009'),'protocols/MOD-PROTOCOL.zh-CN.md'],[t('mod-manager.s956acaa'),'protocols/GLOBAL-EVENTS-PROTOCOL.zh-CN.md'],[t('mod-manager.sdd30be1'),'schemas/mod-api-v1.d.ts'],[t('mod-manager.s2ae69ce'),'schemas/mod-v1.schema.json']])actions.append(button(label,async()=>{try{const response=await fetch(new URL('../../'+path,import.meta.url));if(!response.ok)throw Error(t('mod-manager.s896431a'));download(await response.blob(),path.split('/').at(-1));}catch(error){this.notify(error.message,'error');}}));this.details.append(actions);

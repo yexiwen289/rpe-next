@@ -48,7 +48,7 @@ h1{color:#ffcf5c;font-size:24px;margin:0 0 4px}h2{color:#ffcf5c;font-size:17px;m
 th,td{border:1px solid #2c313a;padding:7px 10px;text-align:left;font-size:13px}th{color:#9aa0ac;width:180px;background:#1e2128}
 ul{padding-left:20px}li{margin:5px 0}li.ok{color:#7fd6a0}.note{color:#9aa0ac;font-size:12px;margin-top:10px}
 </style></head><body>
-<h1>谱面体检报告 · ${name}</h1><div class="sub">由 Re:PhiEdit Next 自动生成 · ${new Date().toLocaleString('zh-CN')}</div>
+<h1>谱面体检报告 · ${name}</h1><div class="sub">由 VibePhi 自动生成 · ${new Date().toLocaleString('zh-CN')}</div>
 <h2>基础信息</h2><table>
 ${kv('曲名', meta.name || '—')}${kv('作曲', meta.composer || '—')}${kv('谱师', meta.charter || '—')}${kv('等级', meta.level || '—')}
 ${kv('音符总数', metrics.totalNotes ?? '—')}${kv('判定线数', chart?.judgeLineList?.length ?? '—')}${kv('时长（秒）', num(metrics.duration))}${kv('平均 NPS', num((metrics.totalNotes ?? 0) / (metrics.duration || 1)))}

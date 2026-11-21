@@ -6,7 +6,7 @@ const { networkInterfaces } = require('node:os');
 const { readFileSync, writeFileSync, mkdirSync } = require('node:fs');
 const { createDiagnostics } = require('./diagnostics.cjs');
 const smoke = process.argv.includes('--smoke-test');
-app.setPath('userData', join(app.getPath('appData'), smoke ? 'rpe-next-server-smoke' : 'rpe-next-server'));
+app.setPath('userData', join(app.getPath('appData'), smoke ? 'vibephi-server-smoke' : 'vibephi-server'));
 mkdirSync(app.getPath('userData'), { recursive: true });
 const configPath = join(app.getPath('userData'), 'preferences.json');
 const diagnosticPath = join(app.getPath('userData'), 'collaboration-diagnostics.log');

@@ -7,7 +7,7 @@
     "en-US": "Pixel Miner"
   },
   "version": "1.0.0",
-  "author": "rpe-next",
+  "author": "vibephi",
   "description": {
     "zh-CN": "用像素钻石镐挖走编辑器控件，收集掉落物与经验，再把真正的控件放回屏幕。九格快捷栏，1–9 选择；关闭工具状态保留布局，恢复快捷键或停用模组会全部复原。图像与音效均由程序生成。",
     "en-US": "Mine editor controls away with a pixel diamond pickaxe, collect the drops and experience, then put the real controls back on screen. Nine-slot hotbar, choose with 1–9; hiding the tool keeps the layout, and restoring the shortcut or disabling the mod puts everything back. All images and sounds are generated in code."

@@ -4,7 +4,7 @@ import { MAPPER_MODELS } from '../core/audio-mapper.mjs';
 import { t } from '../i18n.mjs';
 
 const node = (tag, text = '', className = '') => { const element = document.createElement(tag); element.textContent = text; element.className = className; return element; };
-const preferenceKey = 'rpe-next-audio-onsets-v1';
+const preferenceKey = 'vibephi-audio-onsets-v1';
 
 export class AudioOnsetsPanel {
   constructor(onsets, sources, notify) {

@@ -233,7 +233,7 @@ export class VersionControlPanel {
     this.workingDiff = this.tab === 'changes' ? await this.repo.workingDiff(this.snapshot()).catch(() => null) : null;
     if (!this.selectedCommit || !this.commits.some(commit => commit.id === this.selectedCommit)) this.selectedCommit = this.state.headId ?? this.commits[0]?.id ?? null;
     this.detail = this.selectedCommit ? await this.repo.diffCommit(this.selectedCommit).catch(() => null) : null;
-    if (this.authorDraft === null) this.authorDraft = { ...(repo.config?.author ?? { name: t('version-control.sea431f3'), email: 'local@rpe-next' }) };
+    if (this.authorDraft === null) this.authorDraft = { ...(repo.config?.author ?? { name: t('version-control.sea431f3'), email: 'local@vibephi' }) };
     this.mergeChoices.clear();
     this.render();
   }
@@ -575,7 +575,7 @@ export class VersionControlPanel {
     message.value = this.messageDraft;
     message.addEventListener('input', () => { this.messageDraft = message.value; });
     form.append(message);
-    const author = this.authorDraft ?? { name: t('version-control.sea431f3'), email: 'local@rpe-next' };
+    const author = this.authorDraft ?? { name: t('version-control.sea431f3'), email: 'local@vibephi' };
     const name = el('input', { value: author.name, attrs: { 'aria-label': t('version-control.sc6d5de9'), placeholder: t('version-control.sc6d5de9') } });
     const email = el('input', { value: author.email, attrs: { 'aria-label': t('version-control.s0dec6cf'), placeholder: t('version-control.s0dec6cf') } });
     name.addEventListener('input', () => { this.authorDraft = { ...(this.authorDraft ?? author), name: name.value }; });
@@ -752,7 +752,7 @@ export class VersionControlPanel {
       if (!message) throw new Error(t('version-control.sd1c665f'));
       const author = {
         name: this.authorDraft?.name?.trim() || t('version-control.sea431f3'),
-        email: this.authorDraft?.email?.trim() || 'local@rpe-next'
+        email: this.authorDraft?.email?.trim() || 'local@vibephi'
       };
       const repo = await this.repo.read();
       repo.config = { ...(repo.config ?? {}), author };
@@ -1025,7 +1025,7 @@ export class VersionControlPanel {
   async exportBundle() {
     await this.run(async () => {
       const bundle = await this.repo.exportBundle();
-      const name = `rpe-next-vcs-${new Date().toISOString().slice(0, 10)}.json`;
+      const name = `vibephi-vcs-${new Date().toISOString().slice(0, 10)}.json`;
       download(new Blob([JSON.stringify(bundle)], { type: 'application/json' }), name);
       this.notify(t('version-control.s7d9144d', { p0: bundle.commits.length }));
     });

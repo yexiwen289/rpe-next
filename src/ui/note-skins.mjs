@@ -9,7 +9,7 @@ import { hitFrame } from '../core/visual-constants.mjs';
 import { DEFAULT_APPEARANCE } from '../core/default-settings.mjs';
 import { t } from '../i18n.mjs';
 
-const ACTIVE_KEY='rpe-next-note-skin-v1';
+const ACTIVE_KEY='vibephi-note-skin-v1';
 const action=(text,run,className='')=>{const node=document.createElement('button');node.type='button';node.textContent=text;node.className=className;node.onclick=run;return node;};
 const text=(tag,value,className='')=>{const node=document.createElement(tag);node.textContent=value;node.className=className;return node;};
 const title=record=>record?record.info.name+(record.info.author?` (${record.info.author})`:''):t('note-skins.s32e82dc');

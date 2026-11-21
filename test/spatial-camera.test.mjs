@@ -11,7 +11,7 @@ const view=(width=1000,height=700,divisor=1,ratio=1.5)=>{const viewport=previewV
 const near=(actual,expected,tolerance=1e-7)=>assert.ok(Math.abs(actual-expected)<tolerance,`${actual} != ${expected}`);
 
 test('摄像机跟随选项属于各谱面，默认关闭且随有来源的全局数据保存',()=>{
-  const a=createChart(),b=createChart(),manifest={id:'spatial-camera',name:'三维摄像机',author:'rpe-next',version:'1.0.0'};
+  const a=createChart(),b=createChart(),manifest={id:'spatial-camera',name:'三维摄像机',author:'vibephi',version:'1.0.0'};
   const changed=withCameraFollow(a,manifest,true);assert.equal(cameraFollowsChart(changed),true);assert.equal(cameraFollowsChart(a),false);assert.equal(cameraFollowsChart(b),false);assert.equal(withCameraFollow(a,manifest,false),a);
   const parsed=parseChart(serializeChart(changed));assert.equal(cameraFollowsChart(parsed),true);assert.equal(parsed.globalEvents.types['spatial-camera/lens'].source.id,manifest.id);assert.deepEqual(parsed.globalEvents.types['spatial-camera/lens'].columns.fov.events,[]);assert.ok(parsed.META.RPEVersion>=240);
   assert.equal(cameraFollowsChart(withCameraFollow(parsed,manifest,false)),false);assert.equal(cameraFollowsChart(parsed),true);

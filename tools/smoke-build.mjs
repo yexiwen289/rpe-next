@@ -9,11 +9,11 @@ let output = '';
 child.stdout.on('data', data => { output += data; });
 child.stderr.on('data', data => { output += data; });
 try {
-  for (let attempt = 0; attempt < 50 && !output.includes('Re:PhiEdit Next:'); attempt++) {
+  for (let attempt = 0; attempt < 50 && !output.includes('VibePhi:'); attempt++) {
     if (child.exitCode !== null) throw new Error(output || '构建产物启动失败');
     await delay(100);
   }
-  if (!output.includes('Re:PhiEdit Next:')) throw new Error('构建产物启动超时');
+  if (!output.includes('VibePhi:')) throw new Error('构建产物启动超时');
   for (const path of ['/', '/styles.css', '/src/ui/app.mjs', '/src/ui/help.mjs', '/src/ui/settings.mjs', '/src/ui/dom-i18n.mjs', '/src/core/scene.mjs', '/src/ui/line-dialog.mjs', '/src/ui/event-interaction.mjs', '/src/ui/event-inspector.mjs', '/src/platform/hitsounds.mjs', '/src/i18n.mjs', '/src/core/i18n-core.mjs', '/src/core/locales.mjs', '/src/locales/zh-CN.mjs', '/src/locales/en-US.mjs', '/src/platform/locale.mjs', '/assets/agent-source.json', '/assets/rpe/Texture/Tap2.png', '/assets/rpe/fonts/cmdysj.ttf', '/assets/rpe/SE/tap.ogg']) {
     const response = await fetch(`http://127.0.0.1:${port}${path}`);
     if (response.status !== 200 || !(await response.text()).length) throw new Error(`${path} 不可读取`);

@@ -77,10 +77,14 @@ export class AgentDialogues {
       const provider = panel.providers.get(providerId);
       const current = panel.settings.provider === providerId ? panel.settings.model : null;
       fillModels(provider?.models ?? [], current);
-      if (!provider?.listModels || !panel.settings.key) return;
+      // 密钥存于 panel.key（settings 不含 key），且异步读取可能尚未完成。
+      if (panel.credentialsReady) await panel.credentialsReady;
+      if (seq !== modelSeq || this.providerSelect.value !== providerId) return;
+      const config = panel.config?.();
+      if (!provider?.listModels || !config?.key) return;
       this.modelSelect.title = '正在拉取模型列表…';
       try {
-        const names = await provider.listModels(panel.settings);
+        const names = await provider.listModels(config);
         if (seq !== modelSeq || this.providerSelect.value !== providerId) return;
         fillModels(names, current);
         this.modelSelect.title = `已从接口拉取 ${names.length} 个模型`;

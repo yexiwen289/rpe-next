@@ -169,10 +169,10 @@ export class AgentPanel {
       try { const names = await entry.listModels({ ...this.settings, key: key.value.trim() }); if (seq === modelFetchSeq && providerId === provider.value) fillDatalist(names); }
       catch { /* 拉取失败保留内置列表，仍可手动输入 */ }
     };
-    updateModels();
-    key.addEventListener('change', () => updateModels());
     field(t('agent-panel.s98fd0cb'), model); form.append(models);
     const key = document.createElement('input'); key.type = 'password'; key.autocomplete = 'off'; key.value = this.key; key.setAttribute('aria-label', 'API Key'); field('API Key', key);
+    updateModels();
+    key.addEventListener('change', () => updateModels());
     const remember = document.createElement('input'); remember.type = 'checkbox'; remember.checked = this.settings.rememberKey; field(t('agent-panel.s1ea779d'), remember);
     form.append(text('p', this.credentials.bridge ? t('agent-panel.sc782ac6') : t('agent-panel.s8588e54'), 'hint'));
     const forget = button(t('agent-panel.sf1a538c'), async () => {

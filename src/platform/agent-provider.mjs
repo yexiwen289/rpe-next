@@ -57,6 +57,18 @@ export function createDeepSeekProvider(request) {
     id: 'deepseek', name: 'DeepSeek', defaultModel: 'deepseek-flash',
     models: ['deepseek-flash', 'deepseek-v4-pro'],
     capabilities(model) { return { tools: true, images: ['deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'].includes(model), search: true, streaming: true, contextWindow: 1048576 }; },
+    async listModels(config, { signal } = {}) {
+      checkAgentSignal(signal);
+      const key = 'model-list:' + config.key, cached = metadata.get(key);
+      if (cached && Date.now() - cached.at < 3600000) return cached.value;
+      try {
+        const response = await call('/models', config, {}, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000) });
+        const found = Array.isArray(response?.data) ? response.data.map(entry => entry?.id).filter(id => typeof id === 'string' && id.trim()) : [];
+        const value = [...new Set([...found, ...this.models])];
+        metadata.set(key, { at: Date.now(), value });
+        return value;
+      } catch { return [...this.models]; }
+    },
     async modelInfo(config, { signal } = {}) {
       checkAgentSignal(signal);
       const identity = config.key + '\n' + config.model, cached = metadata.get(identity);
@@ -123,6 +135,18 @@ export function createOpenAIProvider({ id, name, baseUrl, models = [], defaultMo
   return {
     id, name, defaultModel: defaultModel ?? models[0], models,
     capabilities(model) { return { tools: true, streaming: true, contextWindow, ...capabilities }; },
+    async listModels(config, { signal } = {}) {
+      checkAgentSignal(signal);
+      const key = 'model-list:' + config.key, cached = metadata.get(key);
+      if (cached && Date.now() - cached.at < 3600000) return cached.value;
+      try {
+        const response = await call('/models', config, {}, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000) });
+        const found = Array.isArray(response?.data) ? response.data.map(entry => entry?.id).filter(id => typeof id === 'string' && id.trim()) : [];
+        const value = [...new Set([...found, ...models])];
+        metadata.set(key, { at: Date.now(), value });
+        return value;
+      } catch { return [...models]; }
+    },
     async modelInfo(config, { signal } = {}) {
       checkAgentSignal(signal);
       const identity = config.key + '\n' + config.model, cached = metadata.get(identity);

@@ -158,7 +158,19 @@ export class AgentPanel {
     for (const entry of this.providers.entries.values()) { const option = text('option', entry.name); option.value = entry.id; provider.append(option); }
     provider.value = this.providers.entries.has(this.settings.provider) ? this.settings.provider : 'deepseek'; field(t('agent-panel.s4b81846'), provider);
     const model = document.createElement('input'); model.type = 'text'; model.value = this.settings.model; model.setAttribute('aria-label', t('agent-panel.s1b5fc09')); model.setAttribute('list', 'ai-model-options');
-    const models = document.createElement('datalist'); models.id = 'ai-model-options'; const updateModels = () => models.replaceChildren(...(this.providers.get(provider.value).models ?? []).map(name => { const option = document.createElement('option'); option.value = name; return option; })); updateModels();
+    const models = document.createElement('datalist'); models.id = 'ai-model-options';
+    const fillDatalist = names => models.replaceChildren(...names.map(name => { const option = document.createElement('option'); option.value = name; return option; }));
+    let modelFetchSeq = 0;
+    const updateModels = async () => {
+      const seq = ++modelFetchSeq, providerId = provider.value;
+      const entry = this.providers.get(providerId);
+      fillDatalist(entry?.models ?? []);
+      if (!entry?.listModels || !key.value.trim()) return;
+      try { const names = await entry.listModels({ ...this.settings, key: key.value.trim() }); if (seq === modelFetchSeq && providerId === provider.value) fillDatalist(names); }
+      catch { /* 拉取失败保留内置列表，仍可手动输入 */ }
+    };
+    updateModels();
+    key.addEventListener('change', () => updateModels());
     field(t('agent-panel.s98fd0cb'), model); form.append(models);
     const key = document.createElement('input'); key.type = 'password'; key.autocomplete = 'off'; key.value = this.key; key.setAttribute('aria-label', 'API Key'); field('API Key', key);
     const remember = document.createElement('input'); remember.type = 'checkbox'; remember.checked = this.settings.rememberKey; field(t('agent-panel.s1ea779d'), remember);
@@ -190,7 +202,7 @@ export class AgentPanel {
     provider.onchange = async () => {
       drafts.set(selectedProvider, key.value); selectedProvider = provider.value; model.value = this.providers.get(provider.value).defaultModel; updateModels();
       const serial = ++loading; key.disabled = apply.disabled = forget.disabled = true;
-      try { const value = drafts.has(selectedProvider) ? drafts.get(selectedProvider) : this.settings.rememberKey ? await this.credentials.read(selectedProvider) : ''; if (serial === loading) key.value = value; }
+      try { const value = drafts.has(selectedProvider) ? drafts.get(selectedProvider) : this.settings.rememberKey ? await this.credentials.read(selectedProvider) : ''; if (serial === loading) { key.value = value; if (value) updateModels(); } }
       catch (problem) { if (serial === loading) { key.value = ''; error.textContent = problem.message; } }
       finally { if (serial === loading) key.disabled = apply.disabled = forget.disabled = false; }
     };

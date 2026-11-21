@@ -65,15 +65,30 @@ export class AgentDialogues {
     this.modelSelect.setAttribute('aria-label', '模型');
     this.modelSelect.className = 'agent-model-select';
     this.modelConfig = button('⚙', () => panel.configuration()); this.modelConfig.className = 'agent-model-config'; this.modelConfig.title = '模型与 API 配置';
-    const refreshModels = () => {
-      const provider = panel.providers.get(this.providerSelect.value);
-      const current = panel.settings.provider === this.providerSelect.value ? panel.settings.model : null;
-      this.modelSelect.replaceChildren(...(provider?.models ?? []).map(name => { const option = text('option', name); option.value = name; return option; }));
-      if (current && this.modelSelect.querySelector(`option[value="${CSS.escape(current)}"]`)) this.modelSelect.value = current;
+    // 先用内置列表瞬时填充，再用 /models 接口拉账号实际可用模型补全下拉。
+    const fillModels = (names, current) => {
+      this.modelSelect.replaceChildren(...names.map(name => { const option = text('option', name); option.value = name; return option; }));
+      if (current && !names.includes(current)) { const option = text('option', current); option.value = current; this.modelSelect.append(option); }
+      if (current) this.modelSelect.value = current;
+    };
+    let modelSeq = 0;
+    const refreshModels = async () => {
+      const seq = ++modelSeq, providerId = this.providerSelect.value;
+      const provider = panel.providers.get(providerId);
+      const current = panel.settings.provider === providerId ? panel.settings.model : null;
+      fillModels(provider?.models ?? [], current);
+      if (!provider?.listModels || !panel.settings.key) return;
+      this.modelSelect.title = '正在拉取模型列表…';
+      try {
+        const names = await provider.listModels(panel.settings);
+        if (seq !== modelSeq || this.providerSelect.value !== providerId) return;
+        fillModels(names, current);
+        this.modelSelect.title = `已从接口拉取 ${names.length} 个模型`;
+      } catch { this.modelSelect.title = '模型列表拉取失败，显示内置列表'; }
     };
     refreshModels();
     this.providerSelect.onchange = async () => {
-      try { await panel.useBuiltinProvider(this.providerSelect.value); refreshModels(); }
+      try { await panel.useBuiltinProvider(this.providerSelect.value); await refreshModels(); }
       catch (error) { panel.notify(error.message, 'error'); this.providerSelect.value = panel.settings.provider; }
     };
     this.modelSelect.onchange = () => {

@@ -3259,7 +3259,7 @@ export default {
     'agent-editor.s1f63ce2': "选择音源请提供source或非空sources，移除仅提供source",
     'agent-editor.s405820e': "调整播放与分析音源：",
     'agent-editor.sd53908e': "查询采音方式、模型、难度、随机种子及门限。status检测当前所选本机模型环境；detector可指定要检测的mapper/ddc/flux。安装须用户在波形/频谱确认，失败不会静默换算法。",
-    'agent-editor.s58b6271': "在本机分析指定线拍数区间，返回候选音符时间。mapper用Mapperatorinator按音乐和难度生成节奏草稿，通常先用original混音，不能按置信度门限筛选；ddc/flux用于起音对比。可预先分离配器。考虑谱面BPM、相位、声部对齐和线倍率，最长180秒，不上传PCM。",
+    'agent-editor.s58b6271': "在本机分析指定线拍数区间，返回候选音符时间。mapper用Mapperatorinator按音乐和难度生成节奏草稿，通常先用original混音，不能按置信度门限筛选；ddc/flux用于起音对比。可预先分离配器。考虑谱面BPM、相位、声部对齐和线倍率，单次硬上限183秒、建议区间不超过180秒（超长分段分析），不上传PCM。",
     'agent-editor.sc789bcf': "从Mapperatorinator节奏草稿或DDC/flux起音候选生成Tap。mapper通过difficulty/mode/seed控制，不使用minConfidence；优先以original混音分析。默认自适应量化，none保留模型时刻，nearest严格网格。声部共用原音乐起点和延迟，线倍率处理一次，跳过重复及Hold占用，一次撤销。",
     'agent-editor.s2564c2e': "节奏草稿没有可新增的落点；可调整范围、参考难度或量化，谱面保持原样",
     'agent-editor.sace83fe': "没有适合新增的瞬态拍点；可调整范围、灵敏度或细分，谱面保持原样",

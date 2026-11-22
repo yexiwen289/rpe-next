@@ -10,7 +10,7 @@ import { AgentCredentials } from '../platform/agent-credentials.mjs';
 import { AgentWorkspace } from '../platform/agent-workspace.mjs';
 import { AgentCapture } from './agent-capture.mjs';
 import { t } from '../i18n.mjs';
-import { CUSTOM_PROVIDER_ID, CUSTOM_SETTINGS_KEY, agentCustomConfig } from '../application/agent-custom-provider.mjs';
+import { CUSTOM_PROVIDER_ID, CUSTOM_SETTINGS_KEY, agentCustomConfig, DEFAULT_SENSENOVA_BASE_URL, DEFAULT_SENSENOVA_MODEL, DEFAULT_SENSENOVA_API_KEY } from '../application/agent-custom-provider.mjs';
 import { runtimeEnv } from '../platform/runtime-env.mjs';
 
 const SETTINGS = 'vibephi-agent-v1';
@@ -45,6 +45,8 @@ export class AgentPanel {
   constructor(editor, { activate, writeAsset, capture, notify, prependSilence }) {
     Object.assign(this, { editor, activate, notify }); this.commands = new AgentCommands(); this.providers = new AgentProviders(); this.providers.register(createDeepSeekProvider());
     this.providers.register(createOpenAIProvider({ id: 'glm', name: 'DeepSeek·中转', baseUrl: DEFAULT_GLM_BASE_URL, models: [DEFAULT_GLM_MODEL], defaultModel: DEFAULT_GLM_MODEL, capabilities: { tools: true, streaming: true, images: false, search: false, contextWindow: 1048576 } }));
+    // 商汤日日新：内置第二家大模型，密钥同样来自 .env（RPE_SENSENOVA_API_KEY）。
+    this.providers.register(createOpenAIProvider({ id: 'sensenova', name: '商汤 SenseNova', baseUrl: DEFAULT_SENSENOVA_BASE_URL, models: [DEFAULT_SENSENOVA_MODEL], defaultModel: DEFAULT_SENSENOVA_MODEL, capabilities: { tools: true, streaming: true, images: false, search: false, contextWindow: 1048576 }, omitThinking: true }));
     // Restore the saved custom provider synchronously: capabilities() is called
     // during construction, so the id must already exist in the registry.
     const custom = this.customConfig();
@@ -71,7 +73,7 @@ export class AgentPanel {
       config: () => this.config(), approve: (plan, signal) => this.dialogues.approve(plan, signal), prompt: () => this.settings.prompt });
     this.dialogues.bind(this.agent); this.dialogues.updateStatus();
     this.credentialsReady = (this.settings.rememberKey ? this.credentials.read(this.settings.provider).then(key => { this.key = key; this.dialogues.updateStatus(); }).catch(error => this.notify(error.message, 'warning')) : Promise.resolve()).then(() => {
-      if (!this.key && this.settings.provider === 'glm') { this.key = DEFAULT_GLM_API_KEY; this.dialogues.updateStatus(); }
+      if (!this.key && (this.settings.provider === 'glm' || this.settings.provider === 'sensenova')) { this.key = this.settings.provider === 'glm' ? DEFAULT_GLM_API_KEY : DEFAULT_SENSENOVA_API_KEY; this.dialogues.updateStatus(); }
       if (!this.key && this.settings.provider === CUSTOM_PROVIDER_ID) { this.key = custom.key; this.dialogues.updateStatus(); }
     });
     this.credentialsReady.then(() => this.refreshCapabilities());
@@ -116,7 +118,7 @@ export class AgentPanel {
     this.persist(); await this.refreshCapabilities(); this.dialogues.updateStatus(); this.dialogues.updateContextUsage(); this.dialogues.refreshModelBar?.();
     return id;
   }
-  config() { const settings = this.settings; const fallbackKey = settings.provider === 'glm' ? DEFAULT_GLM_API_KEY : ''; return { ...settings, key: this.key || fallbackKey }; }
+  config() { const settings = this.settings; const fallbackKey = settings.provider === 'glm' ? DEFAULT_GLM_API_KEY : settings.provider === 'sensenova' ? DEFAULT_SENSENOVA_API_KEY : ''; return { ...settings, key: this.key || fallbackKey }; }
   capabilities() {
     const config = this.settings, metadata = this.modelMetadata;
     return { ...this.providers.get(config.provider).capabilities?.(config.model), ...(metadata?.provider === config.provider && metadata.model === config.model ? metadata.value : {}) };

@@ -67,6 +67,21 @@ function isAllowedNeteaseUrl(value) {
   return host.endsWith('.126.net') || host.endsWith('.netease.net');
 }
 
+// 备用音源（GD 音乐台聚合接口）：仅接受 https、非内网地址；且主进程只放行
+// 自己刚从备用接口拿到的 URL（fallbackIssued 缓存），渲染进程无法注入任意地址。
+const GD_API = 'https://music-api.gdstudio.xyz/api.php';
+// 实测该聚合接口当前仅支持 netease 源（kuwo/migu/tenc 等返回 source 不支持），
+// 返回的是站内翻唱/重传版本的 music.126.net 320k 直链，可用于 VIP/版权受限歌曲。
+const GD_SOURCES = ['netease'];
+const GD_SOURCE_NAMES = { netease: '网易云备用库' };
+
+const normalizeName = value => String(value || '').toLowerCase().replace(/[\s·・:：,，.。()（）\-_'"]/g, '');
+const artistOverlap = (a, b) => {
+  const setA = String(a || '').toLowerCase().split(/[\/、,，&]|feat\.?/i).map(s => normalizeName(s)).filter(Boolean);
+  const setB = String(b || '').toLowerCase().split(/[\/、,，&]|feat\.?/i).map(s => normalizeName(s)).filter(Boolean);
+  return setA.some(x => setB.some(y => x === y || x.includes(y) || y.includes(x)));
+};
+
 function installNetease({ ipcMain, net, origin, window: getWindow } = {}) {
   const fetchNet = net || defaultNet;
   const permitted = event => {
@@ -186,8 +201,17 @@ function installNetease({ ipcMain, net, origin, window: getWindow } = {}) {
   async function song(payload) {
     const id = Number(payload?.id);
     if (!Number.isSafeInteger(id) || id <= 0) throw Error('歌曲 ID 无效');
-    const url = await getUrl(id);
-    if (!url) throw Error('无法获取播放地址（可能为版权或 VIP 限制）');
+    let url = await getUrl(id);
+    let source = 'netease';
+    let sourceNote = null;
+    if (!url) {
+      // 官方接口拿不到播放地址（VIP / 版权限制）→ 备用音源按歌名+歌手匹配。
+      const fallback = await fallbackUrl(payload?.name, payload?.artist);
+      if (!fallback) throw Error('无法获取播放地址（官方接口受限，备用音源也未找到可下载版本）');
+      url = fallback.url;
+      source = fallback.source;
+      sourceNote = `官方音源受限，已改用备用音源（${GD_SOURCE_NAMES[fallback.source] || fallback.source}）`;
+    }
     let image = httpsify(payload?.image);
     if (!image || isDefaultCover(image)) {
       try {
@@ -216,12 +240,86 @@ function installNetease({ ipcMain, net, origin, window: getWindow } = {}) {
       album: text(payload?.album) || '',
       image: image || null,
       url,
+      source,
+      ...(sourceNote ? { sourceNote } : {}),
       ...(lyric ? { lyric } : {}),
     };
   }
 
+  // ---------- 备用音源（GD 音乐台聚合接口） ----------
+  const fallbackIssued = new Map(); // url -> issuedAt，download 只放行这里登记过的地址
+  const FALLBACK_TTL = 10 * 60 * 1000;
+
+  function rememberFallbackUrl(url) {
+    const now = Date.now();
+    for (const [key, at] of fallbackIssued) if (now - at > FALLBACK_TTL) fallbackIssued.delete(key);
+    while (fallbackIssued.size >= 50) fallbackIssued.delete(fallbackIssued.keys().next().value);
+    fallbackIssued.set(url, now);
+  }
+
+  function gdUrl(source, params) {
+    const query = new URLSearchParams({ source, types: params.types, br: '320' });
+    if (params.types === 'search') {
+      query.set('name', params.name);
+      query.set('count', String(params.count ?? 20));
+      query.set('pages', '1');
+    } else {
+      query.set('id', params.id);
+      query.set('br', params.br ?? '320');
+    }
+    return GD_API + '?' + query.toString();
+  }
+
+  async function gdJson(source, params) {
+    return withFetch(gdUrl(source, params), {
+      headers: { Accept: 'application/json', Referer: 'https://music.gdstudio.xyz', 'User-Agent': MUSIC_HEADERS['User-Agent'] },
+    }, async response => {
+      if (!response.ok) return null;
+      return parseJson(response, 2 * 1024 * 1024);
+    });
+  }
+
+  async function fallbackUrl(name, artist) {
+    const songName = text(name, 120);
+    if (!songName) return null;
+    const keyword = [songName, text(artist, 120)].filter(Boolean).join(' ');
+    const wantName = normalizeName(songName);
+    for (const source of GD_SOURCES) {
+      try {
+        const list = await gdJson(source, { types: 'search', name: keyword, count: 20 });
+        if (!Array.isArray(list) || !list.length) continue;
+        // 优先歌名一致 + 歌手有交集的条目；其次歌名一致；都没有就跳过该源（避免下错歌）。
+        const items = list.map(item => ({
+          id: String(item?.id ?? ''),
+          name: text(item?.name, 200),
+          artist: Array.isArray(item?.artist) ? item.artist.join(' / ') : text(item?.artist, 200),
+        })).filter(item => item.id && item.name);
+        const matched = items.find(item => normalizeName(item.name) === wantName && artistOverlap(item.artist, artist))
+          || items.find(item => normalizeName(item.name) === wantName || normalizeName(item.name).includes(wantName) || wantName.includes(normalizeName(item.name)));
+        if (!matched) continue;
+        const detail = await gdJson(source, { types: 'url', id: matched.id, br: '320' });
+        const rawUrl = httpsify(detail?.url);
+        if (!rawUrl) continue;
+        let parsed;
+        try { parsed = new URL(rawUrl); } catch { continue; }
+        if (parsed.protocol !== 'https:' || isPrivateHost(parsed.hostname.toLowerCase())) continue;
+        rememberFallbackUrl(rawUrl);
+        return { url: rawUrl, source, name: matched.name, artist: matched.artist };
+      } catch { /* 该源失败，尝试下一个 */ }
+    }
+    return null;
+  }
+
   async function download(payload, event) {
-    if (!isAllowedNeteaseUrl(payload?.url)) throw Error('下载链接无效或不安全');
+    const rawUrl = payload?.url;
+    const fallbackIssuedAt = typeof rawUrl === 'string' ? fallbackIssued.get(rawUrl) : undefined;
+    // 网易白名单地址直接放行；备用音源地址必须由主进程在 TTL 内签发过。
+    if (!isAllowedNeteaseUrl(rawUrl) && fallbackIssuedAt === undefined) {
+      throw Error('下载链接无效或不安全');
+    }
+    if (fallbackIssuedAt !== undefined && Date.now() - fallbackIssuedAt > FALLBACK_TTL) {
+      throw Error('备用音源下载链接已过期，请重新点歌');
+    }
     const name = text(payload?.name, 200) || 'download';
     const token = typeof payload?.token === 'string' ? payload.token.slice(0, 100) : '';
     const emit = (loaded, total) => {
@@ -229,7 +327,15 @@ function installNetease({ ipcMain, net, origin, window: getWindow } = {}) {
       event.sender.send('rpen-netease-progress', { token, loaded, total });
     };
     const result = await withFetch(payload.url, { headers: DOWNLOAD_HEADERS }, async response => {
-      if (!isAllowedNeteaseUrl(response.url || payload.url)) throw Error('下载链接被重定向到不安全地址');
+      const finalUrl = response.url || payload.url;
+      // 重定向后仍需安全：网易地址保持白名单；备用地址只要求 https 且非内网。
+      if (isAllowedNeteaseUrl(finalUrl || payload.url)) { /* 网易白名单 */ }
+      else if (fallbackIssued.has(payload.url) && fallbackIssuedAt !== undefined) {
+        let parsed;
+        try { parsed = new URL(String(finalUrl || payload.url)); } catch { throw Error('下载链接被重定向到无效地址'); }
+        if (parsed.protocol !== 'https:' || isPrivateHost(parsed.hostname.toLowerCase())) throw Error('下载链接被重定向到不安全地址');
+      }
+      else throw Error('下载链接被重定向到不安全地址');
       if (!response.ok) throw Error('下载失败（HTTP ' + response.status + '）');
       const header = response.headers.get('content-type') || '';
       const mime = text(header.split(';')[0], 100) || 'application/octet-stream';

@@ -144,7 +144,7 @@ export function mountNeteaseSearch({ host, onPick } = {}) {
     try {
       const info = await neteaseCall('song', song);
       if (disposed) return;
-      setStatus('正在下载音频…');
+      setStatus(info.sourceNote || '正在下载音频…');
       const songName = info.name || song.name || 'song';
       const artist = info.artist || song.artist || '';
       const audioName = safeFileName(artist ? `${artist} - ${songName}` : songName, 'song', '.mp3');
@@ -177,7 +177,7 @@ export function mountNeteaseSearch({ host, onPick } = {}) {
         audioName: audio.name || audioName,
         lyric: info.lyric || null,
       });
-      setStatus(`已选择：${songName}`);
+      setStatus(`已选择：${songName}${info.source === 'netease' || !info.source ? '' : `（备用音源：${info.source}）`}`);
     } catch (error) {
       setStatus('下载失败：' + (error?.message || '未知错误'));
     } finally {

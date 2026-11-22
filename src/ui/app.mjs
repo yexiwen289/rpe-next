@@ -61,6 +61,7 @@ import { installDomTranslation } from './dom-i18n.mjs';
 import { chartDisplayName } from '../core/labels.mjs';
 import { showHotkeySettings } from './hotkey-settings.mjs';
 import { mountKnowledgePanel } from './knowledge-panel.mjs';
+import { analyzeAgentAudio } from '../core/agent-audio.mjs';
 import { mountNeteaseSearch } from './netease-search.mjs';
 import { AutoSaveClock } from '../application/autosave.mjs';
 import { ManualSaveQueue } from '../application/manual-save.mjs';
@@ -2007,7 +2008,36 @@ function parseLrcMarkers(lrc, limit = 400) {
   return markers.sort((a, b) => a.time - b.time);
 }
 
-// 网易云一键流水线：搜索 → 拉取封面+音乐 → 新建谱面 → DDC 全曲预分析 → 进入 AI 工作台
+// 网易云一键流水线：搜索 → 拉取封面+音乐 → 新建谱面 → BPM 分析+回写 → DDC 全曲预分析 → 进入 AI 工作台
+
+// BPM 细化：粗估计是整数 BPM 栅格（±1 误差），改用起音点脉冲序列在 ±6% 邻域内做
+// 分数滞后自相关，把精度提到 0.02 BPM，再吸附到整数/半整数。
+function refineBpm(peaks, coarse, span = .06) {
+  const rate = 200, end = peaks.length ? peaks[peaks.length - 1].seconds : 0;
+  const n = Math.ceil((end + 1) * rate);
+  const train = new Float32Array(n);
+  for (const peak of peaks) train[Math.round(peak.seconds * rate)] += peak.strength;
+  let best = coarse, bestScore = -1;
+  for (let bpm = coarse * (1 - span); bpm <= coarse * (1 + span); bpm += .02) {
+    const lag = 60 / bpm * rate; let product = 0, firstEnergy = 0, secondEnergy = 0;
+    for (let index = 0; index < n; index++) {
+      const offset = index + lag, low = Math.floor(offset); if (low >= n) break;
+      const value = train[low] * (1 - (offset - low)) + (train[low + 1] ?? 0) * (offset - low);
+      product += train[index] * value; firstEnergy += train[index] ** 2; secondEnergy += value * value;
+    }
+    const score = product / Math.max(1e-12, Math.sqrt(firstEnergy * secondEnergy));
+    if (score > bestScore) { bestScore = score; best = bpm; }
+  }
+  return best;
+}
+
+function snapBpm(bpm) {
+  const nearest = Math.round(bpm);
+  if (Math.abs(bpm - nearest) <= .06) return nearest;
+  const half = Math.round(bpm * 2) / 2;
+  if (Math.abs(bpm - half) <= .06) return half;
+  return Number(bpm.toFixed(2));
+}
 mountNeteaseSearch({
   host: element('#netease-host'),
   onPick: async ({ song, audioBytes, coverBytes, coverName, audioName, lyric }) => {
@@ -2030,7 +2060,28 @@ mountNeteaseSearch({
         replaceChart(chart, chart.META.name, nextAssets);
         const ok = await loadMusic(audioBytes, audioName, false, false);
         if (!ok) throw Error('音乐载入失败');
-        status(`已从网易云导入《${song?.name ?? audioName}》，${lyricMarkers.length ? `已写入 ${lyricMarkers.length} 条歌词标记，` : ''}DDC 全曲分析在后台进行，可直接向 AI 提要求。`);
+        // BPM 自动分析：对整曲（≤120s 窗口）跑 flux 谱通量自相关估计，取最优候选并
+        // 归一到常见谱面区间后写回 BPMList，覆盖 createChart 默认的 120。
+        let bpmNote = '';
+        try {
+          const analysis = await analyzeAgentAudio(audio.buffer, {
+            startSeconds: 0, endSeconds: Math.min(audio.buffer.duration, 120), focus: 'percussion',
+          });
+          const raw = Number(analysis.estimatedBpms?.[0]?.bpm);
+          if (Number.isFinite(raw) && raw >= 60 && raw <= 240) {
+            const refined = snapBpm(refineBpm(analysis.peaks?.filter(peak => peak.strength > .5) ?? [], raw));
+            let bpm = refined;
+            while (bpm < 70) bpm *= 2;
+            while (bpm > 190) bpm /= 2;
+            const next = { ...session.chart, BPMList: [{ bpm, startTime: [0, 0, 1] }] };
+            session.commit('BPM 自动分析', next);
+            bpmNote = `，BPM 已分析并设为 ${bpm}`;
+          }
+        } catch (bpmError) {
+          console.warn('BPM 自动分析失败', bpmError);
+          bpmNote = '，BPM 自动分析失败（可在 BPM 面板手动设置）';
+        }
+        status(`已从网易云导入《${song?.name ?? audioName}》，${lyricMarkers.length ? `已写入 ${lyricMarkers.length} 条歌词标记，` : ''}${bpmNote ? bpmNote.slice(1) + '。' : ''}DDC 全曲分析在后台进行，可直接向 AI 提要求。`);
       };
       if (hasDocument && (session.history.dirty || assetDirty)) confirmAction(t('app.s13472be'), () => apply().catch(reportError));
       else await apply();

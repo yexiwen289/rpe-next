@@ -97,9 +97,10 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
   const reload = element('button', 'kb-reload', '重新加载');
   const save = element('button', 'kb-save', '保存');
   const saveNote = element('span', 'kb-save-note');
-  for (const button of [tabPreview, tabEdit, reload, save]) button.type = 'button';
+  const close = element('button', 'kb-close', '关闭');
+  for (const button of [tabPreview, tabEdit, reload, save, close]) button.type = 'button';
   save.disabled = !canWrite;
-  toolbar.append(search, searchCount, tabPreview, tabEdit, reload, save, saveNote);
+  toolbar.append(search, searchCount, tabPreview, tabEdit, reload, save, saveNote, close);
 
   const notice = element('div', 'kb-notice');
   const preview = element('div', 'kb-preview');
@@ -328,13 +329,33 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
   setMode('preview');
   void refresh();
 
+  const setVisible = visible => {
+    root.hidden = !visible;
+    if (visible && !selectedPath && !destroyed) void refresh();
+    // 打开时监听外部点击 / Esc；关闭后移除，不影响编辑器其它快捷键
+    if (visible) {
+      document.addEventListener('mousedown', onOutsideClick, true);
+      document.addEventListener('keydown', onEscape, true);
+    } else {
+      document.removeEventListener('mousedown', onOutsideClick, true);
+      document.removeEventListener('keydown', onEscape, true);
+    }
+  };
+  const onOutsideClick = event => {
+    if (!(event.target instanceof Node)) return;
+    if (!root.contains(event.target)) setVisible(false);
+  };
+  const onEscape = event => {
+    if (event.key !== 'Escape') return;
+    event.stopImmediatePropagation();
+    setVisible(false);
+  };
+  close.addEventListener('click', () => setVisible(false));
+
   return {
     element: root,
-    destroy() { destroyed = true; root.remove(); },
+    destroy() { destroyed = true; setVisible(false); root.remove(); },
     refresh,
-    setVisible(visible) {
-      root.hidden = !visible;
-      if (visible && !selectedPath && !destroyed) void refresh();
-    },
+    setVisible,
   };
 }

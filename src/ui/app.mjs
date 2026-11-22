@@ -2028,7 +2028,7 @@ function refineBpm(peaks, coarse, span = .06) {
     const score = product / Math.max(1e-12, Math.sqrt(firstEnergy * secondEnergy));
     if (score > bestScore) { bestScore = score; best = bpm; }
   }
-  return best;
+  return { bpm: best, score: bestScore };
 }
 
 function snapBpm(bpm) {
@@ -2069,10 +2069,11 @@ mountNeteaseSearch({
           });
           const raw = Number(analysis.estimatedBpms?.[0]?.bpm);
           if (Number.isFinite(raw) && raw >= 60 && raw <= 240) {
-            const refined = snapBpm(refineBpm(analysis.peaks?.filter(peak => peak.strength > .5) ?? [], raw));
-            let bpm = refined;
-            while (bpm < 70) bpm *= 2;
-            while (bpm > 190) bpm /= 2;
+            // 高 BPM（300+）会被粗估计折半甚至折三分之一，因此同时细化 1/2/3 倍频，按得分择优。
+            const strongPeaks = analysis.peaks?.filter(peak => peak.strength > .5) ?? [];
+            const candidates = [refineBpm(strongPeaks, raw), refineBpm(strongPeaks, raw * 2), refineBpm(strongPeaks, raw * 3)];
+            const best = candidates.reduce((left, right) => right.score > left.score ? right : left);
+            const bpm = snapBpm(best.bpm);
             const next = { ...session.chart, BPMList: [{ bpm, startTime: [0, 0, 1] }] };
             session.commit('BPM 自动分析', next);
             bpmNote = `，BPM 已分析并设为 ${bpm}`;

@@ -16,3 +16,9 @@ examples/editor-skins/daybreak/
 Thumbs.db
 *.zip
 *.pez
+android-shell/build/
+android-shell/assets/
+android-shell/keystore/
+dist-apk/
+*.apk
+*.idsig

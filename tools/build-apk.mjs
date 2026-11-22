@@ -2,7 +2,7 @@
 // 用法: node tools/build-apk.mjs [--skip-build] [--version-code N] [--out DIR]
 // 依赖: E:/android-build 下的 jdk-17*、android-14(build-tools)、android-34(platform)
 import { spawnSync } from 'node:child_process';
-import { cp, mkdir, readFile, readdir, rm } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
@@ -63,6 +63,31 @@ for (const name of await readdir(dist)) {
   await cp(join(dist, name), join(www, name), { recursive: true });
 }
 console.log('✓ dist → android-shell/assets/www');
+
+// ---------- 1.5 注入本地密钥（与 tools/serve.mjs 网页端同机制：rpe-env meta） ----------
+// 使移动端开箱即用桌面端的 AI 配置；密钥来自本地 .env（gitignored，不入库）。
+try {
+  const envPath = join(root, '.env');
+  if (existsSync(envPath)) {
+    const ENV_KEYS = ['RPE_GLM_API_KEY', 'RPE_SENSENOVA_API_KEY'];
+    const runtimeEnv = {};
+    for (const line of (await readFile(envPath, 'utf8')).split(/\r?\n/)) {
+      const match = /^\s*([\w]+)\s*=\s*(.*?)\s*$/.exec(line);
+      if (match && ENV_KEYS.includes(match[1])) runtimeEnv[match[1]] = match[2].replace(/^["']|["']$/g, '');
+    }
+    const tags = ENV_KEYS.filter(key => runtimeEnv[key]).map(key =>
+      `<meta name="rpe-env" data-key="${key}" content="${String(runtimeEnv[key]).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">`).join('');
+    if (tags) {
+      const indexPath = join(www, 'index.html');
+      let html = await readFile(indexPath, 'utf8');
+      html = html.replace('</head>', tags + '</head>');
+      await writeFile(indexPath, html);
+      console.log('✓ 已注入本地 AI 密钥（rpe-env meta）→ 开箱即用');
+    }
+  }
+} catch (error) {
+  console.warn('⚠ .env 密钥注入失败（APK 仍可手动配置密钥）:', error.message);
+}
 
 // ---------- 2. 资源编译与链接 ----------
 await rm(buildDir, { recursive: true, force: true });

@@ -74,7 +74,7 @@ export class AgentPanel {
     this.agent = this.createAgent();
     this.agents = new Map();
     // 并行任务：每个对话有独立 agent 实例；当前对话复用主 agent。
-    this.agentFor = record => record.id === this.dialogues.store.selected ? this.agent : (this.agents.get(record.id) ?? (() => { const agent = this.createAgent(); this.dialogues.bind(agent); this.agents.set(record.id, agent); return agent; })());
+    this.agentFor = record => this.agents.get(record.id) ?? (() => { const agent = this.createAgent(); this.dialogues.bind(agent); this.agents.set(record.id, agent); return agent; })();
     this.dialogues.bind(this.agent); this.dialogues.updateStatus();
     this.credentialsReady = (this.settings.rememberKey ? this.credentials.read(this.settings.provider).then(key => { this.key = key; this.dialogues.updateStatus(); }).catch(error => this.notify(error.message, 'warning')) : Promise.resolve()).then(() => {
       if (!this.key && (this.settings.provider === 'glm' || this.settings.provider === 'sensenova')) { this.key = this.settings.provider === 'glm' ? DEFAULT_GLM_API_KEY : DEFAULT_SENSENOVA_API_KEY; this.dialogues.updateStatus(); }
@@ -145,6 +145,7 @@ export class AgentPanel {
   flush() { return this.dialogues.flush(); }
   async stopAndFlush() {
     this.dialogues.pauseQueue();
+    for (const agent of this.agents.values()) agent.stop();
     if (this.agent.busy) await new Promise(resolve => {
       const finish = () => { clearTimeout(timer); this.agent.removeEventListener('state', changed); resolve(); };
       const changed = () => { if (!this.agent.busy) finish(); }, timer = setTimeout(finish, 10000);

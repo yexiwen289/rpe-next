@@ -4,11 +4,13 @@ import { renderAgentMarkdown } from './agent-markdown.mjs';
 // 本地增量知识库：与 agent-editor / chart_knowledge_write 使用同一个路径。
 const LOCAL_PATH = 'knowledge.local.md';
 const CORE_BASELINE = 'protocols/CHART-DESIGN-KNOWLEDGE.zh-CN.md';
+const ADVANCED_TECHNIQUES = 'protocols/ADVANCED-CHART-TECHNIQUES.zh-CN.md';
 
 // bundle 里实际包含 6 份协议（见 AGENT_SOURCE_DOCUMENTS），AUDIO-SEPARATION 是第 7 份。
 // 这里保留完整的 7 份清单；不在 bundle 中的文档会被标记为「不可用（只读）」。
 const PRESET_DOCUMENTS = Object.freeze([
   { path: CORE_BASELINE, name: '制谱设计知识库（核心）' },
+  { path: 'protocols/ADVANCED-CHART-TECHNIQUES.zh-CN.md', name: '高级谱面手法知识库' },
   { path: 'protocols/AI-AGENT-PROTOCOL.zh-CN.md', name: 'AI 代理协作协议' },
   { path: 'protocols/AUDIO-SEPARATION.zh-CN.md', name: '音频分离协议' },
   { path: 'protocols/CHART-VERSION-CONTROL.zh-CN.md', name: '谱面版本控制协议' },
@@ -81,10 +83,14 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
   const root = element('div', 'kb-panel');
   const sidebar = element('div', 'kb-sidebar');
   sidebar.append(element('div', 'kb-sidebar-title', '知识库文档'));
+  const newRow = element('div', 'kb-new-row');
+  const newTag = element('input', 'kb-new-tag'); newTag.type = 'text'; newTag.placeholder = '新标签（如：倒打）'; newTag.maxLength = 40;
+  const newButton = element('button', 'kb-new', '＋ 标签新建'); newButton.type = 'button';
+  newRow.append(newTag, newButton);
   const list = element('div', 'kb-list');
   const sidebarHint = element('p', 'kb-hint',
     canWrite ? '基线协议来自内置知识资源，只读；修改会写入工作区本地副本。' : '工作区不可用：仅可查看基线文档，保存已禁用。');
-  sidebar.append(list, sidebarHint);
+  sidebar.append(newRow, list, sidebarHint);
 
   const main = element('div', 'kb-main');
   const toolbar = element('div', 'kb-toolbar');
@@ -115,6 +121,7 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
   let destroyed = false, loadToken = 0, saving = false;
   let sourceIndex = null, sourceError = '';
   let docs = [], selectedPath = null, savedText = null, currentText = '', mode = 'preview';
+  let taggedPaths = [];
 
   const currentDoc = () => docs.find(item => item.path === selectedPath) ?? null;
 
@@ -206,6 +213,7 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
     for (const preset of PRESET_DOCUMENTS) {
       docs.push({ ...preset, kind: 'baseline', available: paths.has(preset.path), overridePath: overridePath(preset.path) });
     }
+    for (const path of taggedPaths) docs.push({ path, name: '标签 · ' + displayName(path), kind: 'local', available: true, overridePath: null });
     for (const path of [...paths].filter(item => item.startsWith('protocols/') && item.endsWith('.md')
       && !PRESET_DOCUMENTS.some(preset => preset.path === item)).sort()) {
       docs.push({ path, name: displayName(path), kind: 'baseline', available: true, overridePath: overridePath(path) });
@@ -308,12 +316,39 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
   reload.addEventListener('click', () => { void selectDoc(selectedPath, true); });
   save.addEventListener('click', () => { void saveCurrent(); });
   editor.addEventListener('input', () => { currentText = editor.value; updateSaveState(); });
+  newButton.addEventListener('click', () => { void createTaggedDoc(); });
+  newTag.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); void createTaggedDoc(); } });
   search.addEventListener('input', () => { renderPreview(); updateHits(); });
 
   // ---------- 初始化 / 对外接口 ----------
+  async function loadTaggedDocs() {
+    taggedPaths = [];
+    if (!canWrite) return;
+    try {
+      const response = await workspace.call('list', { path: 'knowledge/tags', recursive: false, limit: 200 });
+      taggedPaths = (response?.entries ?? []).filter(entry => entry.kind === 'file' && entry.path.endsWith('.md')).map(entry => entry.path).sort();
+    } catch { /* 目录尚不存在 */ }
+  }
+
+  async function createTaggedDoc() {
+    const tag = newTag.value.trim().replace(/[\\/:*?"<>|]/g, '-').slice(0, 40);
+    if (!tag) { say('请先输入标签名', 'warning'); newTag.focus(); return; }
+    if (!canWrite) { say('工作区不可用，无法新建知识库', 'error'); return; }
+    const path = `knowledge/tags/${tag}.md`;
+    if (docs.some(doc => doc.path === path)) { say('该标签知识库已存在', 'warning'); return; }
+    try {
+      await workspace.call('write', { path, text: `# ${tag}\n\n标签：${tag}\n\n在此记录该标签下的谱面设计约定、案例与反例。\n`, overwrite: true });
+      newTag.value = '';
+      await refresh();
+      await selectDoc(path, true);
+      say(`已新建标签知识库：${tag}`, 'success');
+    } catch (error) { say('新建失败：' + (error?.message ?? error), 'error'); }
+  }
+
   async function refresh() {
     if (destroyed) return;
     await loadSource();
+    await loadTaggedDocs();
     if (destroyed) return;
     docs = buildDocuments();
     if (sourceError) {

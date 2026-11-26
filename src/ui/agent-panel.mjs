@@ -69,8 +69,12 @@ export class AgentPanel {
     this.adapter = createAgentEditorCommands(this.commands, editor, { controls: this.controls, network, ask: (args, signal) => this.dialogues.ask(args, signal), capture, captureEditor: (args, signal) => this.capture.capture(args, signal), prependSilence, workspace: this.workspace });
     editor.agent = { apiVersion: AGENT_API_VERSION, commands: this.commands, providers: this.providers, allowedPanes: () => [...document.querySelectorAll('[data-panel]')].map(node => node.dataset.panel),
       capabilities: () => this.capabilities(), workspace: this.workspace, flush: () => this.flush(), dataUrl, writeAsset, open: () => this.open() };
-    this.agent = new EditorAgent({ commands: this.commands, providers: this.providers, context: () => ({ session: editor.hasDocument ? editor.session : null, summary: this.adapter.summary() }),
+    this.createAgent = () => new EditorAgent({ commands: this.commands, providers: this.providers, context: () => ({ session: editor.hasDocument ? editor.session : null, summary: this.adapter.summary() }),
       config: () => this.config(), approve: (plan, signal) => this.dialogues.approve(plan, signal), prompt: () => this.settings.prompt });
+    this.agent = this.createAgent();
+    this.agents = new Map();
+    // 并行任务：每个对话有独立 agent 实例；当前对话复用主 agent。
+    this.agentFor = record => record.id === this.dialogues.store.selected ? this.agent : (this.agents.get(record.id) ?? (() => { const agent = this.createAgent(); this.dialogues.bind(agent); this.agents.set(record.id, agent); return agent; })());
     this.dialogues.bind(this.agent); this.dialogues.updateStatus();
     this.credentialsReady = (this.settings.rememberKey ? this.credentials.read(this.settings.provider).then(key => { this.key = key; this.dialogues.updateStatus(); }).catch(error => this.notify(error.message, 'warning')) : Promise.resolve()).then(() => {
       if (!this.key && (this.settings.provider === 'glm' || this.settings.provider === 'sensenova')) { this.key = this.settings.provider === 'glm' ? DEFAULT_GLM_API_KEY : DEFAULT_SENSENOVA_API_KEY; this.dialogues.updateStatus(); }

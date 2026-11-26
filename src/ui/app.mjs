@@ -54,7 +54,7 @@ import { renderMetadataPanel, renderBpmPanel } from './forms.mjs';
 import { EditorPlayback } from '../application/playback.mjs';
 import { readEditorPreferences, writeEditorPreferences } from '../platform/editor-preferences.mjs';
 import { ProjectHome } from './home.mjs';
-import { createSettingsPanel } from './settings.mjs';
+import { createSettingsPanel, applyLazyUi } from './settings.mjs';
 import { currentLocale, setLocale, t } from '../i18n.mjs';
 import { localeCandidates, preferredLocales, readLocalePreference, writeLocalePreference } from '../platform/locale.mjs';
 import { installDomTranslation } from './dom-i18n.mjs';
@@ -124,6 +124,7 @@ if (globalThis.rpenDesktopStorage) {
 
 const element = selector => document.querySelector(selector);
 let mods;
+applyLazyUi();
 let agentPanel;
 globalThis.__rpenModInputGate=true;
 for(const type of ['keydown','keyup','wheel','pointerdown','pointerup','mousedown','mouseup','click','dblclick','contextmenu','drop','dragstart','input','change','submit'])window.addEventListener(type,event=>{
@@ -2007,6 +2008,45 @@ function parseLrcMarkers(lrc, limit = 400) {
   }
   return markers.sort((a, b) => a.time - b.time);
 }
+
+// 预览界面右键：把当前谱面信息作为上下文反馈给 AI。
+const previewFeedbackMenu = element('div', 'preview-feedback-menu');
+previewFeedbackMenu.hidden = true;
+document.body.append(previewFeedbackMenu);
+function closePreviewFeedbackMenu() { previewFeedbackMenu.hidden = true; }
+for (const target of [element('#preview'), element('#realtime-preview')]) {
+  if (!target) continue;
+  target.addEventListener('contextmenu', event => {
+    if (!hasDocument) return;
+    event.preventDefault();
+    const chart = session.chart;
+    const seconds = Number(chartSeconds?.() ?? audio?.time ?? 0);
+    const beat = tempo?.beat ? tempo.beat(seconds) : Number((seconds * (chart.BPMList?.[0]?.bpm ?? 120) / 60).toFixed(2));
+    const info = {
+      name: chart.META?.name, bpm: chart.BPMList?.map(entry => ({ beat: entry.startTime, bpm: entry.bpm })),
+      lines: chart.judgeLineList?.length,
+      notes: chart.judgeLineList?.reduce((sum, line) => sum + (line.notes?.length ?? 0), 0),
+      playheadSeconds: Number(seconds.toFixed(2)), playheadBeat: Number(beat.toFixed(2)),
+      offset: chart.META?.offset,
+    };
+    previewFeedbackMenu.replaceChildren();
+    const item = element('button', '', '把当前谱面信息反馈给 AI'); item.type = 'button';
+    item.onclick = () => {
+      closePreviewFeedbackMenu();
+      const instruction = `请在当前谱面上下文下分析并给出建议（不要直接改谱）：\n${JSON.stringify(info, null, 2)}`;
+      agentPanel?.open();
+      if (agentPanel?.input) { agentPanel.input.value = agentPanel.input.value ? `${agentPanel.input.value.trim()} ${instruction}` : instruction; agentPanel.input.dispatchEvent(new Event('input')); agentPanel.input.focus(); }
+      activatePane('ai-tools');
+      status('已将谱面信息写入 AI 指令，可继续补充要求。');
+    };
+    previewFeedbackMenu.append(item);
+    previewFeedbackMenu.style.left = `${Math.min(event.clientX, innerWidth - 210)}px`;
+    previewFeedbackMenu.style.top = `${Math.min(event.clientY, innerHeight - 60)}px`;
+    previewFeedbackMenu.hidden = false;
+  });
+}
+document.addEventListener('mousedown', event => { if (!previewFeedbackMenu.hidden && !previewFeedbackMenu.contains(event.target)) closePreviewFeedbackMenu(); }, true);
+document.addEventListener('keydown', event => { if (event.key === 'Escape') closePreviewFeedbackMenu(); }, true);
 
 // 网易云一键流水线：搜索 → 拉取封面+音乐 → 新建谱面 → BPM 分析+回写 → DDC 全曲预分析 → 进入 AI 工作台
 

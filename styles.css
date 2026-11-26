@@ -2235,3 +2235,25 @@ button.primary:hover, .primary:hover, .home-ai-hero-actions button.primary:hover
 .agent-jury-model span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-jury-dialog textarea { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: var(--r-md); background: var(--bg-input); color: var(--text); font: inherit; font-size: 13px; resize: vertical; }
 .agent-jury-result { margin: 14px 0; padding: 14px; max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-root); color: var(--text-secondary); font-size: 12px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+
+/* 高级知识库：标签式新建 */
+.kb-new-row { display: flex; gap: 6px; margin: 8px 0 10px; }
+.kb-new-tag { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--bg-input); color: var(--text); font: inherit; }
+.kb-new { padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--bg-button); color: var(--text); cursor: pointer; }
+.kb-new:hover { border-color: var(--accent); color: var(--accent); }
+
+/* AI 对话框：谱面配置卡片 */
+.agent-config-cards { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 8px 2px; }
+.agent-config-card { border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; background: var(--bg-panel); color: var(--text-soft); font-size: 12px; cursor: pointer; }
+.agent-config-card:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 预览右键菜单 */
+.preview-feedback-menu { position: fixed; z-index: 1000; min-width: 190px; padding: 5px; border: 1px solid var(--border-strong); border-radius: var(--r-md); background: var(--bg-panel); box-shadow: 0 8px 26px #0006; }
+.preview-feedback-menu button { display: block; width: 100%; text-align: left; padding: 7px 10px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); cursor: pointer; font: inherit; }
+.preview-feedback-menu button:hover { background: var(--bg-hover); color: var(--accent); }
+
+/* 懒人式 UI 自定义 */
+body.lazy-compact .panel, body.lazy-compact .settings-group { padding-top: 6px !important; padding-bottom: 6px !important; }
+body.lazy-compact button, body.lazy-compact select { min-height: 26px; }
+body.lazy-focus .inspector:not(.ai-tools):not(#ai-tools-panel) { display: none !important; }
+body.lazy-big-targets button, body.lazy-big-targets select, body.lazy-big-targets input[type=checkbox] { min-height: 40px; min-width: 40px; }

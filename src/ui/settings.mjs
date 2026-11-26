@@ -2,6 +2,16 @@ import { DEFAULT_EDITOR_PREFERENCES, DEFAULT_SETTINGS } from '../core/default-se
 import { attachRangeValueTooltip } from './range-value-tooltip.mjs';
 import { availableLocales, currentLocale, setLocale, t } from '../i18n.mjs';
 
+const LAZY_KEY = 'vibephi-lazy-ui-v1';
+const LAZY_FIELDS = [['lazyCompact', 'lazy-compact', '紧凑界面（减少留白）'], ['lazyFocus', 'lazy-focus', '专注模式（编辑时隐藏非核心侧栏）'], ['lazyBigTargets', 'lazy-big-targets', '大按钮热区（触屏友好）']];
+export function lazyUiSettings() {
+  try { return { lazyCompact: false, lazyFocus: false, lazyBigTargets: false, ...JSON.parse(localStorage.getItem(LAZY_KEY) ?? '{}') }; } catch { return { lazyCompact: false, lazyFocus: false, lazyBigTargets: false }; }
+}
+export function applyLazyUi() {
+  const settings = lazyUiSettings();
+  for (const [key, className] of LAZY_FIELDS) document.body.classList.toggle(className, Boolean(settings[key]));
+}
+
 // The panel is generated from `t()` keys. Switching the language rebuilds the
 // body in place; the two skin sections and the detail blocks moved out of
 // index.html stay the same nodes so their controllers remain connected.
@@ -65,6 +75,18 @@ export function createSettingsPanel({ onLocaleChange = () => {} } = {}) {
     const languageHint = document.createElement('p'); languageHint.className = 'hint'; languageHint.textContent = t('settings.languageHint');
     languageField.append(languageSelect); language.append(languageField, languageHint); body.append(language);
     body.append(skins, noteSkins);
+
+    const lazy = document.createElement('section'); lazy.className = 'settings-group';
+    const lazyHeading = document.createElement('h3'); lazyHeading.textContent = '懒人式 UI 自定义'; lazy.append(lazyHeading);
+    const values = lazyUiSettings();
+    for (const [key, unused, label] of LAZY_FIELDS) {
+      const field = document.createElement('label'); field.className = 'field'; field.append(label);
+      const input = document.createElement('input'); input.type = 'checkbox'; input.id = key; input.checked = Boolean(values[key]);
+      input.onchange = () => { values[key] = input.checked; localStorage.setItem(LAZY_KEY, JSON.stringify(values)); applyLazyUi(); };
+      field.append(input); lazy.append(field);
+    }
+    const lazyHint = document.createElement('p'); lazyHint.className = 'hint'; lazyHint.textContent = '设置即时生效并保存在本机；可随时关闭。'; lazy.append(lazyHint);
+    body.append(lazy);
 
   group(t('settings.s7757a0d'), [['fps-unlimited', t('settings.s0908c46'), 'checkbox', false], ['fps-limit', t('settings.s819ead9'), 'number', DEFAULT_SETTINGS.fpsLimit, 10, undefined, 'any']]);
   const fpsInput = body.querySelector('#fps-limit'); fpsInput.disabled = true;

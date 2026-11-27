@@ -66,7 +66,9 @@ export class AgentPanel {
     };
     this.workspace = new AgentWorkspace(() => editor.agentWorkspaceId);
     this.capture = new AgentCapture({ controls: this.controls, refresh: () => editor.invalidate() });
-    this.adapter = createAgentEditorCommands(this.commands, editor, { controls: this.controls, network, ask: (args, signal) => this.dialogues.ask(args, signal), capture, captureEditor: (args, signal) => this.capture.capture(args, signal), prependSilence, workspace: this.workspace });
+    this.adapter = createAgentEditorCommands(this.commands, editor, { controls: this.controls, network, ask: (args, signal) => this.dialogues.ask(args, signal), capture, captureEditor: (args, signal) => this.capture.capture(args, signal), prependSilence, workspace: this.workspace,
+      // AI 深度解包分析：knowledge_ingest 用当前配置的模型阅读谱面并提炼经验
+      getAI: () => { try { const config = this.config(), provider = this.providers.get(config.provider); return provider && config.key?.trim() ? { provider, config } : null; } catch { return null; } } });
     editor.agent = { apiVersion: AGENT_API_VERSION, commands: this.commands, providers: this.providers, allowedPanes: () => [...document.querySelectorAll('[data-panel]')].map(node => node.dataset.panel),
       capabilities: () => this.capabilities(), workspace: this.workspace, flush: () => this.flush(), dataUrl, writeAsset, open: () => this.open() };
     this.createAgent = () => new EditorAgent({ commands: this.commands, providers: this.providers, context: () => ({ session: editor.hasDocument ? editor.session : null, summary: this.adapter.summary() }),

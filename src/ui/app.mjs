@@ -2175,7 +2175,17 @@ listen('#help', () => showDialog(t('app.s066b024'), HELP_TEXT));
 const knowledgeHost = element('#knowledge-panel-host');
 let knowledgePanel;
 listen('#knowledge-open', () => {
-  if (!knowledgePanel) knowledgePanel = mountKnowledgePanel({ host: knowledgeHost, workspace: agentPanel?.workspace, notify });
+  if (!knowledgePanel) knowledgePanel = mountKnowledgePanel({
+    host: knowledgeHost, workspace: agentPanel?.workspace, notify,
+    // AI 深度解包分析：把当前已配置的模型交给知识面板（无配置时返回 null，走规则分析）
+    getAI: () => {
+      try {
+        const provider = agentPanel?.providers?.get?.(agentPanel?.settings?.provider);
+        const config = agentPanel?.config?.();
+        return provider && config?.key?.trim() ? { provider, config } : null;
+      } catch { return null; }
+    },
+  });
   knowledgePanel.setVisible(true);
 });
 

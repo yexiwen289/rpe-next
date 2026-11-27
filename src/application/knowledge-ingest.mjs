@@ -59,8 +59,8 @@ export function ingestPlainText(name, bytes) {
   return { entries: entries.map(entry => ({ section: entry.section || '文本资料', title: entry.title, body: entry.body })), source: name };
 }
 
-/** chart.json 或 .pez/.zip 工程包：解包、定位谱面、分析。 */
-export async function ingestChartPackage(name, bytes) {
+/** chart.json 或 .pez/.zip 工程包：解包、定位谱面（解析后的对象与清理过的名字）。 */
+export async function unpackChartPackage(name, bytes) {
   const data = bytes instanceof ArrayBuffer ? bytes : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   let files = new Map();
   if (/\.(pez|zip)$/i.test(name)) {
@@ -71,8 +71,13 @@ export async function ingestChartPackage(name, bytes) {
   const chartFile = [...files].find(([path]) => isChartDocumentFile(path));
   if (!chartFile) throw Error('工程包中未找到谱面文件');
   const chart = parseDocument(decodeLegacy(chartFile[1]));
-  const result = analyzeChartExperience(chart, name.replace(/\.(pez|zip|json)$/i, ''));
-  return { ...result, packageFiles: files.size, chartFile: chartFile[0] };
+  return { chart, name: name.replace(/\.(pez|zip|json)$/i, ''), packageFiles: files.size, chartFile: chartFile[0] };
+}
+
+/** chart.json 或 .pez/.zip 工程包：解包、定位谱面、规则分析。 */
+export async function ingestChartPackage(name, bytes) {
+  const { chart, name: clean, packageFiles, chartFile } = await unpackChartPackage(name, bytes);
+  return { ...analyzeChartExperience(chart, clean), chart, packageFiles, chartFile };
 }
 
 /** 谱面库项目：直接取 project.chart 分析。 */

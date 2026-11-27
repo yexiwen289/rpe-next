@@ -19,6 +19,7 @@ import { registerAgentWorkspaceTools } from './agent-workspace-tools.mjs';
 import { registerAgentScriptingTools } from './agent-scripting-tools.mjs';
 import { registerAgentFileTools } from './agent-file-tools.mjs';
 import { registerAgentComponentTools } from './agent-component-tools.mjs';
+import { ingestChartPackageAI, ingestLibraryProjectAI } from './knowledge-ai-analysis.mjs';
 import { t } from '../i18n.mjs';
 
 const beatSchema = { description: t('agent-editor.s68d1f7f') };
@@ -29,7 +30,7 @@ const array = (items, maxItems = 2000) => ({ type: 'array', items, maxItems });
 const pathOf = path => { if (typeof path !== 'string' || !path || path.length > 512 || path.includes('\\') || path.startsWith('/') || path.split('/').some(part => !part || ['.', '..'].includes(part))) throw Error(t('agent-editor.s2b5fd94')); return path; };
 const contentBytes = bytes => bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
 
-export function createAgentEditorCommands(commands, editor, { controls, network, ask, capture, captureEditor, prependSilence, patterns = {}, source = new AgentSourceReader(), workspace } = {}) {
+export function createAgentEditorCommands(commands, editor, { controls, network, ask, capture, captureEditor, prependSilence, patterns = {}, source = new AgentSourceReader(), workspace, getAI } = {}) {
   const revisions = new WeakMap(); let serial = 0;
   const revision = chart => { if (!revisions.has(chart)) revisions.set(chart, 'chart_' + ++serial); return revisions.get(chart); };
   const current = () => { if (!editor.hasDocument) throw Error(t('agent-editor.s21c0425')); return editor.chart; };
@@ -77,20 +78,47 @@ export function createAgentEditorCommands(commands, editor, { controls, network,
       },
     };
   }, ['knowledge', 'knowledge base', 'kb', '知识库', '读写', '写', '追加', 'append', 'memory', 'store', 'memory store', 'write', 'design knowledge']);
-  register('knowledge_ingest', '摄取工作区中的任意文本或谱面工程包（pez/zip/json），分析后把经验写入知识库', agentSchema({ path: agentText }, ['path']), 'edit', (args, { signal }) => ({
+  register('knowledge_ingest', '摄取工作区中的任意文本或谱面工程包（pez/zip/json）；谱面由 AI 深度阅读分析后把设计经验写入知识库（AI 不可用时降级为规则统计）', agentSchema({ path: agentText }, ['path']), 'edit', (args, { signal }) => ({
     summary: '分析文件并把经验写入知识库',
     details: { path: args.path },
     valid: () => Boolean(editor.workspace),
     apply: async () => {
       if (!editor.workspace) throw Error('工作区不可用');
       const bytes = await editor.workspace.call('bytes', { path: args.path }, signal);
-      const result = /\.(pez|zip|json)$/i.test(args.path) ? await ingestChartPackage(args.path, bytes) : ingestPlainText(args.path, bytes);
+      const ai = typeof getAI === 'function' ? getAI() : null;
+      const isChart = /\.(pez|zip|json)$/i.test(args.path);
+      const result = isChart && ai
+        ? await ingestChartPackageAI(args.path, bytes, ai, { signal })
+        : isChart ? await ingestChartPackage(args.path, bytes) : ingestPlainText(args.path, bytes);
       const safe = String(args.path).replace(/[\\/:*?"<>|]/g, '_').slice(-80), target = `knowledge/经验/${safe}.md`;
-      const text = `# ${safe} · 自动提炼经验\n\n来源：${result.source}\n${entriesToMarkdown(result.entries)}`;
+      const heading = result.mode === 'ai' ? 'AI 深度分析经验' : '自动提炼经验';
+      const text = `# ${safe} · ${heading}\n\n来源：${result.source}\n${entriesToMarkdown(result.entries)}`;
       await editor.workspace.call('write', { path: target, text, overwrite: true }, signal);
-      return { path: target, entries: result.entries.length, source: result.source };
+      return { path: target, entries: result.entries.length, source: result.source, mode: result.mode ?? 'rules' };
     },
   }));
+  register('knowledge_ingest_current', '把当前打开的谱面交给 AI 深度阅读分析，提炼制谱手法与经验写入知识库（AI 不可用时降级为规则统计）', agentSchema({ tag: { type: 'string', maxLength: 40, description: '可选的知识库文件名标签' } }), 'edit', (args, { signal }) => {
+    const chart = current();
+    const name = String(args.tag ?? '').trim() || String(chart.META?.name ?? '').trim() || '当前谱面';
+    return {
+      summary: `AI 分析当前谱面「${name}」并写入知识库`,
+      details: { notes: chart.judgeLineList?.reduce((sum, line) => sum + (line.numOfNotes ?? line.notes?.length ?? 0), 0) ?? 0, name },
+      valid: () => Boolean(editor.workspace && current()),
+      apply: async () => {
+        if (!editor.workspace) throw Error('工作区不可用');
+        const ai = typeof getAI === 'function' ? getAI() : null;
+        const snapshot = structuredClone(chart);
+        const result = ai
+          ? await ingestLibraryProjectAI({ chart: snapshot, chartName: name }, ai, { signal })
+          : { ...(await import('./knowledge-ingest.mjs')).ingestLibraryProject({ chart: snapshot, chartName: name }), mode: 'rules' };
+        const safe = name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 80), target = `knowledge/经验/${safe}.md`;
+        const heading = result.mode === 'ai' ? 'AI 深度分析经验' : '自动提炼经验';
+        const text = `# ${safe} · ${heading}\n\n来源：${result.source}\n${entriesToMarkdown(result.entries)}`;
+        await editor.workspace.call('write', { path: target, text, overwrite: true }, signal);
+        return { path: target, entries: result.entries.length, source: result.source, mode: result.mode ?? 'rules' };
+      },
+    };
+  }, ['knowledge', 'knowledge base', 'kb', '知识库', '学习', '经验', '分析当前谱面', '解包', 'ingest', 'learn', 'analyze current chart', 'write', 'design knowledge']);
   register('chart_templates', t('agent-editor.s3edd547'), agentSchema({ command: agentText }), 'read', args => ({ apply: () => args.command ? commands.tools().find(tool => tool.function.name === args.command)?.function ?? { error: t('agent-editor.s4b3be4d') } : {
     note: createNote(1, 0, 0), hold: createNote(2, 0, 0, 1), event: createEvent(0, 0, 0, 1), line: createLine(), noiseArea: createNoiseArea(0, 4), noiseTransform: createNoiseEvent(0, 0, 0, 1, { x: 0, y: 0 }),
     scriptApi: { createNote: t('agent-editor.s63f9b5f'), createEvent: '(start,end,startBeat,endBeat)', createLine: '(name?)', createNoiseArea: '(startBeat,endBeat)', createNoiseEvent: '(start,end,startBeat,endBeat,anchor?)', fromNumber: t('agent-editor.s27fbb3b'), beatValue: t('agent-editor.s357cb4b'), parseBeat: t('agent-editor.sc43a600'), easing: '(progress,id)' },

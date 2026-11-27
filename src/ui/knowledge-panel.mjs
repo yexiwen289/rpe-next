@@ -1,6 +1,7 @@
 import { AgentSourceReader } from '../platform/agent-source.mjs';
 import { renderAgentMarkdown } from './agent-markdown.mjs';
 import { ingestPlainText, ingestChartPackage, ingestLibraryProject, entriesToMarkdown } from '../application/knowledge-ingest.mjs';
+import { ingestChartPackageAI, ingestLibraryProjectAI } from '../application/knowledge-ai-analysis.mjs';
 import { listProjects } from '../platform/library.mjs';
 
 // 本地增量知识库：与 agent-editor / chart_knowledge_write 使用同一个路径。
@@ -71,9 +72,10 @@ function highlightMatches(root, term) {
  * @param {HTMLElement} options.host 面板容器
  * @param {import('../platform/agent-workspace.mjs').AgentWorkspace} [options.workspace] 工作区实例（桌面写磁盘 / 网页写 IndexedDB）
  * @param {(message: string, level?: 'success'|'warning'|'error') => void} [options.notify] 提示函数
+ * @param {() => ({ provider: object, config: object } | null)} [options.getAI] 返回当前可用模型（用于 AI 深度解包分析）
  * @returns {{ element: HTMLElement, destroy(): void, refresh(): Promise<void>, setVisible(visible: boolean): void }}
  */
-export function mountKnowledgePanel({ host, workspace, notify } = {}) {
+export function mountKnowledgePanel({ host, workspace, notify, getAI } = {}) {
   if (!host || typeof host.append !== 'function') throw Error('知识库面板需要一个 DOM 容器（host）');
   const canWrite = Boolean(workspace && typeof workspace.call === 'function');
   const say = (message, level = 'info') => {
@@ -363,10 +365,11 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
   async function saveExperience(name, result) {
     const safe = String(name).replace(/[\\/:*?"<>|]/g, '_').slice(0, 80);
     const target = `knowledge/经验/${safe}.md`;
-    const markdown = `# ${safe} · 自动提炼经验\n\n来源：${result.source}\n${entriesToMarkdown(result.entries)}`;
+    const heading = result.mode === 'ai' ? 'AI 深度分析经验' : '自动提炼经验';
+    const markdown = `# ${safe} · ${heading}\n\n来源：${result.source}${result.mode === 'ai' ? '\n分析模式：AI 阅读谱面数据后提炼，附带规则统计附录' : '\n分析模式：规则统计（AI 不可用或未配置）'}\n${entriesToMarkdown(result.entries)}`;
     await workspace.call('write', { path: target, text: markdown, overwrite: true });
     await refresh(); await selectDoc(target, true);
-    say(`已提炼 ${result.entries.length} 条经验并写入：${target}`, 'success');
+    say(`已提炼 ${result.entries.length} 条经验（${result.mode === 'ai' ? 'AI 深度分析' : '规则分析'}）并写入：${target}`, 'success');
   }
 
   async function importSelectedFile() {
@@ -374,8 +377,15 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
     if (!canWrite) { say('工作区不可用，无法写入经验', 'error'); return; }
     try {
       const bytes = await file.arrayBuffer();
-      const result = /\.(pez|zip|json)$/i.test(file.name) ? await ingestChartPackage(file.name, bytes) : ingestPlainText(file.name, bytes);
-      await saveExperience(file.name, result);
+      const ai = typeof getAI === 'function' ? getAI() : null;
+      if (ai && /\.(pez|zip|json)$/i.test(file.name)) {
+        say('AI 深度分析中…（谱面较大时需要十几秒）', 'info');
+        const result = await ingestChartPackageAI(file.name, bytes, ai, { onProgress: message => say(message, 'info') });
+        await saveExperience(file.name, result);
+      } else {
+        const result = /\.(pez|zip|json)$/i.test(file.name) ? await ingestChartPackage(file.name, bytes) : ingestPlainText(file.name, bytes);
+        await saveExperience(file.name, result);
+      }
     } catch (error) { say('分析失败：' + (error?.message ?? error), 'error'); }
   }
 
@@ -395,7 +405,14 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
     try {
       const { readProject } = await import('../platform/library.mjs');
       const project = await readProject(id);
-      await saveExperience(project?.chartName ?? id, ingestLibraryProject(project));
+      const ai = typeof getAI === 'function' ? getAI() : null;
+      if (ai) {
+        say('AI 深度分析中…（谱面较大时需要十几秒）', 'info');
+        const result = await ingestLibraryProjectAI(project, ai, { onProgress: message => say(message, 'info') });
+        await saveExperience(project?.chartName ?? id, result);
+      } else {
+        await saveExperience(project?.chartName ?? id, ingestLibraryProject(project));
+      }
     } catch (error) { say('谱面库提取失败：' + (error?.message ?? error), 'error'); }
   }
 

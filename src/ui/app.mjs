@@ -1598,7 +1598,7 @@ function runHumanLimitTest() {
   const dialog = document.createElement('dialog'); dialog.className = 'human-limit-dialog';
   const title = document.createElement('h3'); title.textContent = '人类极限测试 · ' + report.verdictText; dialog.append(title);
   const summary = document.createElement('p'); summary.className = 'human-limit-summary';
-  summary.textContent = `音符 ${report.stats.notes} · 判定线 ${report.stats.lines} · 最小间隔 ${report.stats.minGapMs ?? '—'}ms · 峰值 ${report.stats.peakPerSecond} 键/秒 · 同时长条 ${report.stats.peakHold} · 连续高密度 ${report.stats.longestDenseSeconds}s`;
+  summary.textContent = `${report.stats.verticalJudgement.enabled ? '垂判已计入 · ' : ''}音符 ${report.stats.notes} · 判定线 ${report.stats.lines} · 最小间隔 ${report.stats.minGapMs ?? '—'}ms · 峰值 ${report.stats.peakPerSecond} 键/秒 · 同时长条 ${report.stats.peakHold} · 连续高密度 ${report.stats.longestDenseSeconds}s`;
   dialog.append(summary);
   const list = document.createElement('div'); list.className = 'human-limit-list';
   if (!report.violations.length) list.append(Object.assign(document.createElement('p'), { textContent: '未发现明显超出双手极限的配置。' }));

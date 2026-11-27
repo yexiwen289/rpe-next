@@ -4,15 +4,33 @@
 const clampNumber = (value, fallback = 0) => Number.isFinite(value) ? value : fallback;
 const beatValue = beat => Array.isArray(beat) ? Number(beat[0] ?? 0) + Number(beat[1] ?? 0) / Number(beat[2] || 1) : Number(beat ?? 0);
 
+// 垂判（PHI 机制）：在落点做判定线的垂线，点垂线上任意位置均可判定。
+// 谱面中出现「判定线被遮挡 + 噪域」或旋转判定线时，按垂判放宽并发手数。
+function detectVerticalJudgement(chart) {
+  const note = JSON.stringify(chart.META ?? {});
+  if (note.includes('垂判') || note.includes('四合院')) return { enabled: true, axis: 'x', reason: '谱面元数据声明使用垂判' };
+  const noise = (chart.blockAreaList ?? []).length > 0;
+  const hidden = (chart.judgeLineList ?? []).some(line => Object.values(line.eventLayers ?? {}).some(events => (events?.alphaEvents ?? []).some(event => Number(event[0]) < 0)));
+  if (noise && hidden) return { enabled: true, axis: 'x', reason: '判定线被透明度隐藏且有噪域覆盖，按垂判击打' };
+  const rotated = (chart.judgeLineList ?? []).some(line => Object.values(line.eventLayers ?? {}).some(events => (events?.rotateEvents ?? []).some(event => {
+    const angle = Math.abs(Number(event[0]) ?? 0) % 360;
+    return angle > 60 && angle < 120;
+  })));
+  if (rotated) return { enabled: true, axis: 'y', reason: '判定线旋转接近垂直，垂线为水平方向' };
+  return { enabled: false, axis: 'x', reason: '' };
+}
+
 export function analyzeHumanLimits(chart, tempo) {
   if (!chart || !tempo || !Array.isArray(chart.judgeLineList)) throw Error('谱面或节拍映射无效');
+  const vertical = detectVerticalJudgement(chart);
   const notes = [];
   chart.judgeLineList.forEach((line, lineIndex) => {
     const factor = clampNumber(line.bpmfactor, 1) || 1;
     for (const note of line.notes ?? []) {
       const at = tempo.seconds(beatValue(note.startTime), factor);
       const end = note.type === 2 ? tempo.seconds(beatValue(note.endTime), factor) : at;
-      notes.push({ lineIndex, at, end: Math.max(at, end), x: clampNumber(note.positionX), type: note.type, fake: Boolean(note.isFake) });
+      const lane = vertical.enabled && vertical.axis === 'y' ? `${lineIndex}:${note.above >= 0 ? 1 : -1}` : `${lineIndex}:${Math.round(clampNumber(note.positionX) * 8)}`;
+      notes.push({ lineIndex, at, end: Math.max(at, end), x: clampNumber(note.positionX), lane, above: note.above, type: note.type, fake: Boolean(note.isFake) });
     }
   });
   notes.sort((a, b) => a.at - b.at || a.x - b.x);
@@ -25,9 +43,11 @@ export function analyzeHumanLimits(chart, tempo) {
   let windowStart = 0;
   for (let end = 0; end < real.length; end++) {
     while (real[end].at - real[windowStart].at > .04) windowStart++;
-    const count = end - windowStart + 1;
-    if (count > 10) { add('fatal', 'burst', `同一瞬间 ${count} 个音符，双手无法覆盖`, { at: sec(real[windowStart].at), count }); break; }
-    if (count > 6 && !violations.some(v => v.code === 'dense')) add('hard', 'dense', `40ms 内 ${count} 连击，接近双手极限`, { at: sec(real[windowStart].at), count });
+    const slice = real.slice(windowStart, end + 1), count = slice.length;
+    const lanes = new Set(slice.map(note => note.lane)).size;
+    const effective = vertical.enabled ? lanes : count;
+    if (effective > 10) { add('fatal', 'burst', `同一瞬间 ${count} 个音符（垂判合并后 ${effective} 条击打线），双手无法覆盖`, { at: sec(real[windowStart].at), count }); break; }
+    if (effective > 6 && !violations.some(v => v.code === 'dense')) add('hard', 'dense', `40ms 内 ${count} 连击（垂判合并后 ${effective} 条击打线），接近双手极限`, { at: sec(real[windowStart].at), count });
   }
 
   // 2. 最小间隔与逐秒密度。
@@ -56,6 +76,7 @@ export function analyzeHumanLimits(chart, tempo) {
     let worst = null;
     for (let i = 1; i < side.length; i++) {
       const dx = Math.abs(side[i].x - side[i - 1].x), gap = side[i].at - side[i - 1].at;
+      if (vertical.enabled && side[i].lane === side[i - 1].lane) continue;
       if (gap <= .12 && dx >= 1.2 && (!worst || dx > worst.dx)) worst = { dx, gap, at: side[i].at };
     }
     if (worst) add('hard', 'jump', `${name}在 ${sec(worst.gap)} 内横跨 ${worst.dx.toFixed(2)} 屏幕宽度`, { at: sec(worst.at), dx: Number(worst.dx.toFixed(2)), gapMs: Number((worst.gap * 1000).toFixed(1)) });
@@ -76,7 +97,7 @@ export function analyzeHumanLimits(chart, tempo) {
     verdict,
     verdictText: { playable: '可打：未发现明显超出人类极限的配置', borderline: '勉强可打：存在高压段落，需要微调', unplayable: '打不过来：存在超出人类极限的配置' }[verdict],
     stats: {
-      notes: real.length, fakeNotes: notes.length - real.length, lines: chart.judgeLineList.length,
+      notes: real.length, fakeNotes: notes.length - real.length, lines: chart.judgeLineList.length, verticalJudgement: vertical,
       minGapMs: Number.isFinite(minGap) ? Number((minGap * 1000).toFixed(1)) : null,
       peakPerSecond: Math.max(0, ...buckets.values()), peakHold, longestDenseSeconds: longest,
     },
@@ -87,6 +108,7 @@ export function analyzeHumanLimits(chart, tempo) {
 export function humanLimitsFeedback(report, chart) {
   const lines = [
     `【人类极限测试结果】${report.verdictText}`,
+    `判定规则：${report.stats.verticalJudgement.enabled ? '已启用垂判（' + report.stats.verticalJudgement.reason + '）' : '常规判定'}`,
     `统计：音符 ${report.stats.notes} / 判定线 ${report.stats.lines} / 最小间隔 ${report.stats.minGapMs ?? '—'}ms / 峰值 ${report.stats.peakPerSecond} 键每秒 / 同时长条 ${report.stats.peakHold} / 持续高密度 ${report.stats.longestDenseSeconds}s`,
   ];
   if (report.violations.length) lines.push('问题清单：', ...report.violations.map(v => `- [${v.level === 'fatal' ? '致命' : '高压'}] ${v.message}（${v.at ?? `${v.seconds}s`}）`));

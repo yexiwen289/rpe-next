@@ -63,6 +63,7 @@ import { chartDisplayName } from '../core/labels.mjs';
 import { showHotkeySettings } from './hotkey-settings.mjs';
 import { mountKnowledgePanel } from './knowledge-panel.mjs';
 import { analyzeAgentAudio } from '../core/agent-audio.mjs';
+import { analyzeHumanLimits, humanLimitsFeedback } from '../core/human-limits.mjs';
 import { mountNeteaseSearch } from './netease-search.mjs';
 import { AutoSaveClock } from '../application/autosave.mjs';
 import { ManualSaveQueue } from '../application/manual-save.mjs';
@@ -1586,9 +1587,41 @@ function setPlayJudge(enabled) {
   invalidate();
 }
 listen('#play-judge', () => {
-  if (!hasDocument) return;
-  setPlayJudge(!playJudgeEnabled);
+  if (!hasDocument) { notify('请先打开谱面', 'warning'); return; }
+  runHumanLimitTest();
 });
+
+function runHumanLimitTest() {
+  let report;
+  try { report = analyzeHumanLimits(session.chart, tempo); }
+  catch (error) { notify('人类极限测试失败：' + error.message, 'error'); return; }
+  const dialog = document.createElement('dialog'); dialog.className = 'human-limit-dialog';
+  const title = document.createElement('h3'); title.textContent = '人类极限测试 · ' + report.verdictText; dialog.append(title);
+  const summary = document.createElement('p'); summary.className = 'human-limit-summary';
+  summary.textContent = `音符 ${report.stats.notes} · 判定线 ${report.stats.lines} · 最小间隔 ${report.stats.minGapMs ?? '—'}ms · 峰值 ${report.stats.peakPerSecond} 键/秒 · 同时长条 ${report.stats.peakHold} · 连续高密度 ${report.stats.longestDenseSeconds}s`;
+  dialog.append(summary);
+  const list = document.createElement('div'); list.className = 'human-limit-list';
+  if (!report.violations.length) list.append(Object.assign(document.createElement('p'), { textContent: '未发现明显超出双手极限的配置。' }));
+  for (const item of report.violations) {
+    const row = document.createElement('div'); row.className = `human-limit-item human-limit-${item.level}`;
+    row.textContent = `${item.level === 'fatal' ? '致命' : '高压'} · ${item.message}${item.at ? `（${item.at}）` : ''}`;
+    list.append(row);
+  }
+  dialog.append(list);
+  const actions = document.createElement('div'); actions.className = 'modal-actions';
+  const close = document.createElement('button'); close.type = 'button'; close.textContent = '关闭'; close.onclick = () => dialog.close();
+  const feedback = document.createElement('button'); feedback.type = 'button'; feedback.className = 'primary'; feedback.textContent = '反馈给 AI 并请求优化';
+  feedback.onclick = () => {
+    dialog.close();
+    agentPanel?.open();
+    const text = humanLimitsFeedback(report, session.chart);
+    if (agentPanel?.input) { agentPanel.input.value = agentPanel.input.value ? `${agentPanel.input.value.trim()}\n${text}` : text; agentPanel.input.dispatchEvent(new Event('input')); agentPanel.input.focus(); }
+    activatePane('ai-tools');
+    notify('已将测试结果写入 AI 指令', 'success');
+  };
+  actions.append(close, feedback); dialog.append(actions);
+  document.body.append(dialog); dialog.showModal(); dialog.addEventListener('close', () => dialog.remove(), { once: true });
+}
 // 试玩模式下任意键都参与判定；仅在播放时生效
 window.addEventListener('keydown', event => {
   if (!playJudgeEnabled || mods?.runtime.locks.size || atHome || !hasDocument || !audio.playing) return;

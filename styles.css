@@ -2295,3 +2295,11 @@ body.ui-hide-knowledge #knowledge-open, body.ui-hide-mods #mods-open, body.ui-hi
 .ui-design-toolbar button { padding: 4px 9px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--bg-button); color: var(--text); cursor: pointer; }
 .ui-design-hint { opacity: .7; }
 .ui-design-enter { width: 100%; padding: 8px; margin-top: 6px; border: 1px solid var(--accent); border-radius: var(--r-md); background: transparent; color: var(--accent); cursor: pointer; }
+
+.human-limit-dialog { width: min(620px, 92vw); max-height: 80vh; overflow: auto; padding: 18px; }
+.human-limit-dialog h3 { margin: 0 0 8px; }
+.human-limit-summary { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+.human-limit-list { display: grid; gap: 6px; margin-bottom: 14px; }
+.human-limit-item { padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--bg-input); border-radius: var(--r-sm); font-size: 13px; }
+.human-limit-fatal { border-left-color: #ff6b6b; }
+.human-limit-hard { border-left-color: #ffb454; }

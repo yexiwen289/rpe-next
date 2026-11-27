@@ -8,6 +8,7 @@ import { createNoiseArea, createNoiseEvent } from '../core/noise-areas.mjs';
 import { beatValue, fromNumber } from '../core/beat.mjs';
 import { deleteLine, duplicateLine, ensureLineCount, reorderLine, setLineParent } from './line-commands.mjs';
 import { TempoMap } from '../core/tempo.mjs';
+import { analyzeHumanLimits } from '../core/human-limits.mjs';
 import { compileExpression } from '../core/batch-script.mjs';
 import { AgentSourceReader } from '../platform/agent-source.mjs';
 
@@ -259,6 +260,10 @@ export function createAgentEditorCommands(commands, editor, { controls, network,
     const plan = prepareChart(args, chart, next.chart, t('agent-editor.s0f318c0'), { line: args.line, source: result.source, start: result.start, end: result.end, beats, added: next.count, skipped: beats.length - next.count, method: result.method, model: result.model, statistics: result.statistics, focus: result.focus, quantization: args.quantization ?? 'adaptive', candidates: selected }), valid = plan.valid;
     return { ...plan, valid: () => valid() && editor.audio.buffer === originalAudio && editor.audioSources?.revision === sourcesRevision };
   });
+  register('human_limits_check', '人类极限测试：按双手人体工学与垂判规则检查当前谱面是否可打，返回结论与问题清单', agentSchema({}), 'read', () => ({ apply: () => {
+    const chart = current();
+    return analyzeHumanLimits(chart, new TempoMap(chart.BPMList));
+  } }));
   register('diagnose', t('agent-editor.sb162aaf'), agentSchema({ offset: agentIndex, limit: integer(1, 200) }), 'read', args => ({ apply: () => { const issues = diagnose(current()); return { total: issues.length, issues: issues.slice(args.offset ?? 0, (args.offset ?? 0) + (args.limit ?? 50)) }; } }));
   // 高层聚合指标：密度/类型/X分布/同步/累计/位置/事件/BPM 等一步获取，供 AI 理解谱面整体结构，
   // 无需逐条读取音符。默认只返回紧凑统计摘要（长数组折叠为 16 桶 + 分位数），

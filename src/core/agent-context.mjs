@@ -154,7 +154,7 @@ export function trimAgentImages(messages, supported = true) {
   return messages;
 }
 
-export const AGENT_CORE_TOOLS = new Set(['agent_tools', 'editor_context', 'editor_entities', 'editor_navigate', 'editor_source', 'chart_read', 'chart_query', 'chart_insights', 'chart_patch', 'chart_transform', 'chart_script', 'chart_templates', 'ui_inspect', 'ui_action', 'ask_user', 'web_search', 'web_fetch', 'history', 'diagnose']);
+export const AGENT_CORE_TOOLS = new Set(['agent_tools', 'editor_context', 'editor_entities', 'editor_navigate', 'editor_source', 'chart_read', 'chart_query', 'chart_insights', 'chart_patch', 'chart_transform', 'chart_script', 'chart_templates', 'ui_inspect', 'ui_action', 'ask_user', 'web_search', 'web_fetch', 'history', 'diagnose', 'human_limits_check']);
 
 // Tools whose results are already compact / must never be structurally trimmed
 // because the agent relies on their exact shape (e.g. tool discovery).

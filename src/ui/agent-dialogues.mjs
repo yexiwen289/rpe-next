@@ -432,7 +432,7 @@ export class AgentDialogues {
     if (!panel.key) { panel.configuration(); return; }
     const turn = { id: crypto.randomUUID(), text: value, instruction, compactOnly, status: 'queued', process: [], messages: compactOnly ? [] : [{ role: 'user', content: value }], answer: '', createdAt: Date.now(), undoDepth: this.panel.editor?.raw?.session?.history?.undoStack?.length ?? 0, queueOrder: Date.now() + (this.sequence = (this.sequence ?? 0) + 1) / 1000 };
     if (!record.turns.length && record.title === t('agent-dialogues.s1b7abf9')) record.title = value.replace(/\s+/g, ' ').slice(0, 24);
-    const parent = this.recordView(record); record.turns.push(turn); this.turnView(record, turn, parent); if (this.store.current === record && !compactOnly) panel.input.value = ''; record.draft = ''; this.save(turn); this.autoQueue = true; this.updateChoices(); this.updateBusy(); this.scroll(true); this.drain();
+    const parent = this.recordView(record); record.turns.push(turn); this.turnView(record, turn, parent); if (this.store.current === record && !compactOnly) panel.input.value = ''; record.draft = ''; this.save(turn); this.autoQueue = true; this.updateChoices(); this.updateBusy(); this.scroll(true); this.drain(); return turn;
   }
   queued() { return [...this.store.records.values()].flatMap(record => record.turns.filter(turn => turn.status === 'queued').map(turn => ({ record, turn }))).sort((first, second) => (first.turn.queueOrder ?? first.turn.createdAt) - (second.turn.queueOrder ?? second.turn.createdAt)); }
   pauseQueue() { this.autoQueue = false; for (const { turn, record } of this.queued()) { turn.paused = true; this.save(turn); this.refreshTurn(record, turn); } this.updateBusy(); }

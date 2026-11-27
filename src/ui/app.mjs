@@ -1629,7 +1629,9 @@ function openAiCollab() {
   parallel.onclick = () => { dialogues.parallelLimit = dialogues.parallelLimit > 1 ? 1 : 3; updateParallel(); if (dialogues.parallelLimit > 1) queueMicrotask(() => dialogues.drain()); };
   const jury = document.createElement('button'); jury.type = 'button'; jury.textContent = '多模型评审团';
   jury.onclick = () => { dialog.close(); void dialogues.openJury(); };
-  tools.append(newButton, parallel, jury); dialog.append(tools);
+  const collide = document.createElement('button'); collide.type = 'button'; collide.textContent = '概念碰撞生成器';
+  collide.onclick = () => { dialog.close(); openConceptCollision(); };
+  tools.append(newButton, parallel, jury, collide); dialog.append(tools);
   const broadcast = document.createElement('div'); broadcast.className = 'ai-collab-broadcast';
   const input = document.createElement('textarea'); input.rows = 3; input.placeholder = '输入要广播给所选对话的任务…';
   const send = document.createElement('button'); send.type = 'button'; send.className = 'primary'; send.textContent = '分发到所选对话';
@@ -1651,6 +1653,86 @@ listen('#play-judge', () => {
   if (!hasDocument) { notify('请先打开谱面', 'warning'); return; }
   runHumanLimitTest();
 });
+
+// 反向教练 Agent：把测试报告交给 AI，用 human_limits_check 工具闭环微调谱面。
+function startReverseCoach(report) {
+  const dialogues = agentPanel?.dialogues;
+  if (!dialogues) { notify('AI 工作台尚未就绪', 'warning'); return; }
+  const record = dialogues.store.create();
+  dialogues.store.rename(record.id, `反向教练 · ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`);
+  const instruction = [
+    '你是「反向教练 Agent」。目标：把当前谱面微调到人类极限测试达到「勉强可打」或「可打」，不得破坏核心设计意图。',
+    '【人类极限测试报告】', humanLimitsFeedback(report, session.chart),
+    '【执行流程】1) 调用 human_limits_check 获取当前结论；2) 若 unplayable，用 chart_patch / chart_transform / bpm_set 小幅微调问题段落（增减间隔、拆分同时击打、缩短或替换长条锁手、必要时改用垂判/侧判机制）；3) 再次调用 human_limits_check，循环最多 8 轮直到 verdict !== "unplayable"；4) 汇报每轮改动与最终统计。',
+    '【约束】每次只改报告中列出的问题点；不要整体重写谱面；保留歌词标记与判定线结构。',
+  ].join('\n');
+  dialogues.show(record.id);
+  void dialogues.send(instruction, '', { recordId: record.id });
+  agentPanel.open(); activatePane('ai-tools');
+  notify('已创建反向教练 Agent，开始自动微调', 'success');
+}
+
+// 概念碰撞：两个机制辩手并行辩论，再由合成 Agent 产出融合方案。
+function openConceptCollision() {
+  const dialogues = agentPanel?.dialogues;
+  if (!dialogues) { notify('AI 工作台尚未就绪', 'warning'); return; }
+  const dialog = document.createElement('dialog'); dialog.className = 'ai-collab-dialog';
+  const heading = document.createElement('h3'); heading.textContent = '概念碰撞生成器'; dialog.append(heading);
+  const hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = '输入两个机制术语，由两个 Agent 分别辩护，再由第三个 Agent 融合出新机制方案。'; dialog.append(hint);
+  const first = document.createElement('input'); first.type = 'text'; first.placeholder = '机制 A（如：仁王盾）';
+  const second = document.createElement('input'); second.type = 'text'; second.placeholder = '机制 B（如：倒打）';
+  const auto = document.createElement('label'); auto.className = 'field'; const autoCheck = document.createElement('input'); autoCheck.type = 'checkbox'; autoCheck.checked = true; auto.append(autoCheck, document.createTextNode('融合后直接写入谱面'));
+  dialog.append(first, second, auto);
+  const actions = document.createElement('div'); actions.className = 'modal-actions';
+  const close = document.createElement('button'); close.type = 'button'; close.textContent = '取消'; close.onclick = () => dialog.close();
+  const start = document.createElement('button'); start.type = 'button'; start.className = 'primary'; start.textContent = '开始碰撞';
+  start.onclick = () => {
+    const a = first.value.trim(), b = second.value.trim();
+    if (!a || !b) { notify('请输入两个机制术语', 'warning'); return; }
+    dialog.close();
+    void runConceptCollision(a, b, autoCheck.checked);
+  };
+  actions.append(close, start); dialog.append(actions);
+  document.body.append(dialog); dialog.showModal(); dialog.addEventListener('close', () => dialog.remove(), { once: true });
+}
+
+async function runConceptCollision(termA, termB, writeChart) {
+  const dialogues = agentPanel?.dialogues; if (!dialogues) return;
+  const makeRecord = title => { const record = dialogues.store.create(); dialogues.store.rename(record.id, title); return record; };
+  const debater = (term, other) => [
+    `你是「${term}」机制辩手，正在与「${other}」机制辩论。请查阅 chart_knowledge 与高级手法定义，说明 ${term} 的核心读谱/手位特征、优势与风险。`,
+    `重点论证：为什么 ${term} 应成为融合方案的主干；如何规避与 ${other} 的冲突。最后给出 3 条可执行的谱面参数建议。`,
+  ].join('\n');
+  const a = makeRecord(`碰撞辩手 A · ${termA}`), b = makeRecord(`碰撞辩手 B · ${termB}`);
+  const [turnA, turnB] = await Promise.all([
+    dialogues.send(debater(termA, termB), '', { recordId: a.id }),
+    dialogues.send(debater(termB, termA), '', { recordId: b.id }),
+  ]);
+  notify(`两个辩手已并行启动：${termA} / ${termB}`, 'info');
+  const deadline = Date.now() + 8 * 60 * 1000;
+  const wait = () => new Promise(resolve => {
+    const check = () => {
+      const done = [turnA, turnB].every(turn => turn && ['completed', 'failed'].includes(turn.status));
+      if (done || Date.now() > deadline) return resolve();
+      setTimeout(check, 600);
+    };
+    setTimeout(check, 600);
+  });
+  await wait();
+  const answer = turn => String(turn?.answer ?? turn?.messages?.filter(message => message.role === 'assistant').map(message => message.content).join('\n') ?? '').trim() || '（辩手未产出有效文本）';
+  const merged = makeRecord(`融合方案 · ${termA}+${termB}`);
+  const instruction = [
+    '你是「概念碰撞」 synthesis Agent。下面两位辩手已完成辩论，请融合两种机制，提出一个可实际写进谱面的新机制方案。',
+    `【机制 A · ${termA} 辩手】\n${answer(turnA)}`,
+    `【机制 B · ${termB} 辩手】\n${answer(turnB)}`,
+    `【要求】给出新机制命名、判定/手位规则、参数区间、3 个可直接执行的谱面改动步骤，并用 human_limits_check 验证至少达到「勉强可打」。`,
+    writeChart ? '请直接调用 chart_patch / chart_transform 在当前谱面上落地该方案，并把新机制名称写入 META.level。' : '仅输出方案文本，不要改谱。',
+  ].join('\n');
+  dialogues.show(merged.id);
+  void dialogues.send(instruction, '', { recordId: merged.id });
+  agentPanel.open(); activatePane('ai-tools');
+  notify('融合 Agent 已启动，正在生成新机制方案', 'success');
+}
 
 function runHumanLimitTest() {
   let report;
@@ -1680,7 +1762,9 @@ function runHumanLimitTest() {
     activatePane('ai-tools');
     notify('已将测试结果写入 AI 指令', 'success');
   };
-  actions.append(close, feedback); dialog.append(actions);
+  const coach = document.createElement('button'); coach.type = 'button'; coach.textContent = '交给反向教练 Agent 优化';
+  coach.onclick = () => { dialog.close(); startReverseCoach(report); };
+  actions.append(close, feedback, coach); dialog.append(actions);
   document.body.append(dialog); dialog.showModal(); dialog.addEventListener('close', () => dialog.remove(), { once: true });
 }
 // 试玩模式下任意键都参与判定；仅在播放时生效

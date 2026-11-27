@@ -1,6 +1,7 @@
 import { DEFAULT_EDITOR_PREFERENCES, DEFAULT_SETTINGS } from '../core/default-settings.mjs';
 import { attachRangeValueTooltip } from './range-value-tooltip.mjs';
 import { availableLocales, currentLocale, setLocale, t } from '../i18n.mjs';
+import { toggle as toggleUiDesigner } from './ui-designer.mjs';
 
 const UI_KEY = 'vibephi-ui-custom-v1';
 const PRESETS = Object.freeze({
@@ -111,6 +112,10 @@ export function createSettingsPanel({ onLocaleChange = () => {} } = {}) {
       input.onchange = () => { values[key] = input.checked; saveUiCustom(values); };
       field.append(input); lazy.append(field);
     }
+    const designButton = document.createElement('button'); designButton.type = 'button'; designButton.className = 'ui-design-enter';
+    designButton.textContent = '进入拖拽编辑模式（拖动按钮 / 点按钮改色 / 调侧栏宽度）';
+    designButton.onclick = () => { dialog.close(); toggleUiDesigner(true); };
+    lazy.append(designButton);
     const lazyHint = document.createElement('p'); lazyHint.className = 'hint'; lazyHint.textContent = '所有改动即时生效并保存在本机；无需编辑任何配置文件。'; lazy.append(lazyHint);
     body.append(lazy);
 

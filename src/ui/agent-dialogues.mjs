@@ -52,6 +52,8 @@ export class AgentDialogues {
   }
   render() {
     const panel = this.panel, heading = text('div', '', 'agent-heading');
+    // 重入保护：渲染前清空宿主容器，避免异常重试时把工作台叠加成两套界面。
+    panel.host.replaceChildren();
     panel.configure = button(t('agent-dialogues.sd7d7ce7'), () => panel.configuration()); heading.append(panel.configure);
     if (globalThis.rpenAgentWorkspace) heading.append(button(t('agent-dialogues.sa1ff8da'), () => panel.workspace.call('open').catch(error => panel.notify(error.message, 'error'))));
     const row = text('div', '', 'agent-conversations'); this.select = document.createElement('select'); this.select.setAttribute('aria-label', t('agent-dialogues.s37f4358')); this.select.onchange = () => this.show(this.select.value);

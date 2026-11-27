@@ -78,9 +78,9 @@ export class AgentPanel {
     // 并行任务：每个对话有独立 agent 实例；当前对话复用主 agent。
     this.agentFor = record => this.agents.get(record.id) ?? (() => { const agent = this.createAgent(); this.dialogues.bind(agent); this.agents.set(record.id, agent); return agent; })();
     this.dialogues.bind(this.agent); this.dialogues.updateStatus();
-    this.credentialsReady = (this.settings.rememberKey ? this.credentials.read(this.settings.provider).then(key => { this.key = key; this.dialogues.updateStatus(); }).catch(error => this.notify(error.message, 'warning')) : Promise.resolve()).then(() => {
-      if (!this.key && (this.settings.provider === 'glm' || this.settings.provider === 'sensenova')) { this.key = this.settings.provider === 'glm' ? DEFAULT_GLM_API_KEY : DEFAULT_SENSENOVA_API_KEY; this.dialogues.updateStatus(); }
-      if (!this.key && this.settings.provider === CUSTOM_PROVIDER_ID) { this.key = custom.key; this.dialogues.updateStatus(); }
+    this.credentialsReady = (this.settings.rememberKey ? this.credentials.read(this.settings.provider).then(key => { this.key = key; this.dialogues?.updateStatus?.(); }).catch(error => this.notify(error.message, 'warning')) : Promise.resolve()).then(() => {
+      if (!this.key && (this.settings.provider === 'glm' || this.settings.provider === 'sensenova')) { this.key = this.settings.provider === 'glm' ? DEFAULT_GLM_API_KEY : DEFAULT_SENSENOVA_API_KEY; this.dialogues?.updateStatus?.(); }
+      if (!this.key && this.settings.provider === CUSTOM_PROVIDER_ID) { this.key = custom.key; this.dialogues?.updateStatus?.(); }
     });
     this.credentialsReady.then(() => this.refreshCapabilities());
     Object.defineProperty(editor.agent, 'ready', { get: () => Promise.all([this.credentialsReady, this.dialogues.ready]) });
@@ -109,7 +109,7 @@ export class AgentPanel {
     if (enable) {
       this.settings = { ...this.settings, provider: CUSTOM_PROVIDER_ID, model: config.model };
       this.key = config.key; this.persist();
-      await this.refreshCapabilities(); this.dialogues.updateStatus(); this.dialogues.updateContextUsage(); this.dialogues.refreshModelBar?.();
+      await this.refreshCapabilities(); this.dialogues?.updateStatus?.(); this.dialogues?.updateContextUsage?.(); this.dialogues?.refreshModelBar?.();
     }
     return config;
   }
@@ -121,7 +121,7 @@ export class AgentPanel {
     const key = this.settings.rememberKey ? await this.credentials.read(id).catch(() => '') : '';
     this.settings = { ...this.settings, provider: id, model: this.providers.get(id).defaultModel ?? this.settings.model };
     this.key = key || (id === 'glm' ? DEFAULT_GLM_API_KEY : '');
-    this.persist(); await this.refreshCapabilities(); this.dialogues.updateStatus(); this.dialogues.updateContextUsage(); this.dialogues.refreshModelBar?.();
+    this.persist(); await this.refreshCapabilities(); this.dialogues?.updateStatus?.(); this.dialogues?.updateContextUsage?.(); this.dialogues?.refreshModelBar?.();
     return id;
   }
   config() { const settings = this.settings; const fallbackKey = settings.provider === 'glm' ? DEFAULT_GLM_API_KEY : settings.provider === 'sensenova' ? DEFAULT_SENSENOVA_API_KEY : ''; return { ...settings, key: this.key || fallbackKey }; }
@@ -134,8 +134,8 @@ export class AgentPanel {
     try {
       const value = config.key && provider.modelInfo ? await provider.modelInfo(config) : {};
       if (generation !== this.metadataGeneration || this.key !== config.key) return;
-      this.modelMetadata = { provider: config.provider, model: config.model, value }; this.dialogues.updateContextUsage();
-    } catch { if (generation === this.metadataGeneration) this.dialogues.updateContextUsage(); }
+      this.modelMetadata = { provider: config.provider, model: config.model, value }; this.dialogues?.updateContextUsage?.();
+    } catch { if (generation === this.metadataGeneration) this.dialogues?.updateContextUsage?.(); }
   }
   applyAppearance() { this.host.style.setProperty('--agent-font-size', this.settings.fontSize + 'px'); }
   persist() { localPreferences.setItem(SETTINGS, JSON.stringify(this.settings)); }
@@ -186,7 +186,7 @@ export class AgentPanel {
     form.append(text('p', this.credentials.bridge ? t('agent-panel.sc782ac6') : t('agent-panel.s8588e54'), 'hint'));
     const forget = button(t('agent-panel.sf1a538c'), async () => {
       forget.disabled = true;
-      try { await this.credentials.write(provider.value, ''); key.value = ''; drafts.delete(provider.value); if (provider.value === this.settings.provider) { this.key = ''; this.dialogues.updateStatus(); } error.textContent = ''; this.notify(t('agent-panel.s7e8ccbc'), 'success'); }
+      try { await this.credentials.write(provider.value, ''); key.value = ''; drafts.delete(provider.value); if (provider.value === this.settings.provider) { this.key = ''; this.dialogues?.updateStatus?.(); } error.textContent = ''; this.notify(t('agent-panel.s7e8ccbc'), 'success'); }
       catch (problem) { error.textContent = problem.message; }
       finally { forget.disabled = false; }
     }); form.append(forget);
@@ -225,7 +225,7 @@ export class AgentPanel {
       try {
         await this.credentials.write(next.provider, next.rememberKey ? apiKey : '');
         localPreferences.setItem(SETTINGS, JSON.stringify(next)); this.settings = next; this.key = apiKey;
-        this.applyAppearance(); this.dialogues.updateStatus(); this.dialogues.updateContextUsage(); this.refreshCapabilities(); this.dialogues.refreshModelBar?.(); dialog.close();
+        this.applyAppearance(); this.dialogues?.updateStatus?.(); this.dialogues?.updateContextUsage?.(); this.refreshCapabilities(); this.dialogues?.refreshModelBar?.(); dialog.close();
       } catch (problem) { error.textContent = problem.message; }
       finally { controls.forEach(control => { control.disabled = false; }); updateBudget(); }
     };

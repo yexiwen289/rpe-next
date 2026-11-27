@@ -21,6 +21,9 @@ export class AgentDialogues {
   constructor(panel) {
     this.panel = panel; this.store = new AgentConversations(); this.views = new Map(); this.scrollStates = new Map(); this.running = null; this.round = null; this.runsByAgent = new WeakMap(); this.rounds = new WeakMap();
     this.dirtyTurns = new Set(); this.dirtyMemories = new Set(); this.traceOwners = new Map(); this.activeExchanges = new Map(); this.runs = new Map(); this.turnViews = new WeakMap(); this.ready = Promise.resolve(); this.generation = 0; this.autoQueue = false;
+    // 并行上限必须有默认值：未点击「并行 ×3」按钮前 undefined 会让 drain 的
+    // `active.size < parallelLimit` 恒为 false，导致所有消息永远停在「等待执行」。
+    this.parallelLimit = 3;
     this.render(); this.show(this.store.current.id);
   }
   async attach(workspace) {

@@ -2086,6 +2086,8 @@ export default {
     'markup.text.7debf9c': "设置",
     'markup.text.2192535': "播放",
     'markup.text.bd1bcc3': "播放预览",
+    'markup.text.aiCollab': "AI 协同",
+    'markup.title.aiCollab': "多 Agent 协同工作台",
     'markup.text.play-judge': "人类极限测试",
     'markup.title.play-judge': "模拟双手极限，检测谱面是否可打并反馈给 AI",
     'markup.aria.play-judge': "人类极限测试",

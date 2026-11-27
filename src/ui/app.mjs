@@ -1586,6 +1586,67 @@ function setPlayJudge(enabled) {
   if (!playJudgeEnabled) for (const instance of [preview, realtimePreview]) instance.resetJudge(null, null);
   invalidate();
 }
+// AI 协同工作台：对话管理、并行状态、任务广播与评审团。
+listen('#ai-collab-open', () => { openAiCollab(); });
+
+function openAiCollab() {
+  const dialogues = agentPanel?.dialogues;
+  if (!dialogues) { notify('AI 工作台尚未就绪', 'warning'); return; }
+  const dialog = document.createElement('dialog'); dialog.className = 'ai-collab-dialog';
+  const heading = document.createElement('h3'); heading.textContent = 'AI 协同工作台'; dialog.append(heading);
+  const hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = '勾选多个对话并广播同一任务，可并行执行；状态实时显示。'; dialog.append(hint);
+  const list = document.createElement('div'); list.className = 'ai-collab-list';
+  const status = record => {
+    if (dialogues.active.has(record.id)) return '运行中';
+    if (record.turns?.some(turn => turn.status === 'queued')) return '排队中';
+    return '空闲';
+  };
+  const renderList = () => {
+    list.replaceChildren();
+    for (const record of dialogues.store.records.values()) {
+      const row = document.createElement('div'); row.className = 'ai-collab-row';
+      const check = document.createElement('input'); check.type = 'checkbox'; check.dataset.recordId = record.id; check.checked = false;
+      const name = document.createElement('strong'); name.textContent = record.title;
+      const state = document.createElement('span'); state.className = 'ai-collab-state'; state.textContent = status(record);
+      if (status(record) === '运行中') state.classList.add('running');
+      const actions = document.createElement('div'); actions.className = 'ai-collab-actions';
+      const open = document.createElement('button'); open.type = 'button'; open.textContent = '切换';
+      open.onclick = () => { dialogues.show(record.id); dialog.close(); agentPanel.open(); activatePane('ai-tools'); };
+      const rename = document.createElement('button'); rename.type = 'button'; rename.textContent = '重命名';
+      rename.onclick = () => { const value = prompt('新名称', record.title); if (value?.trim()) { dialogues.store.rename(record.id, value); dialogues.updateChoices(); renderList(); } };
+      const del = document.createElement('button'); del.type = 'button'; del.textContent = '删除';
+      del.onclick = () => { if (dialogues.active.has(record.id)) { notify('任务运行中，无法删除', 'warning'); return; } if (confirm(`删除对话「${record.title}」？`)) { dialogues.store.remove(record.id); dialogues.show(dialogues.store.selected); dialogues.save(); renderList(); } };
+      actions.append(open, rename, del); row.append(check, name, state, actions); list.append(row);
+    }
+  };
+  renderList(); dialog.append(list);
+  const tools = document.createElement('div'); tools.className = 'ai-collab-tools';
+  const newButton = document.createElement('button'); newButton.type = 'button'; newButton.textContent = '＋ 新建对话';
+  newButton.onclick = () => { dialogues.show(dialogues.store.create().id); renderList(); };
+  const parallel = document.createElement('button'); parallel.type = 'button';
+  const updateParallel = () => { parallel.textContent = `并行上限：${dialogues.parallelLimit}`; };
+  updateParallel();
+  parallel.onclick = () => { dialogues.parallelLimit = dialogues.parallelLimit > 1 ? 1 : 3; updateParallel(); if (dialogues.parallelLimit > 1) queueMicrotask(() => dialogues.drain()); };
+  const jury = document.createElement('button'); jury.type = 'button'; jury.textContent = '多模型评审团';
+  jury.onclick = () => { dialog.close(); void dialogues.openJury(); };
+  tools.append(newButton, parallel, jury); dialog.append(tools);
+  const broadcast = document.createElement('div'); broadcast.className = 'ai-collab-broadcast';
+  const input = document.createElement('textarea'); input.rows = 3; input.placeholder = '输入要广播给所选对话的任务…';
+  const send = document.createElement('button'); send.type = 'button'; send.className = 'primary'; send.textContent = '分发到所选对话';
+  send.onclick = () => {
+    const text = input.value.trim(); if (!text) { notify('请输入任务内容', 'warning'); return; }
+    const ids = [...list.querySelectorAll('input:checked')].map(node => node.dataset.recordId);
+    if (!ids.length) { notify('请至少勾选一个对话', 'warning'); return; }
+    for (const id of ids) void dialogues.send(text, '', { recordId: id });
+    input.value = ''; dialog.close(); notify(`已分发任务到 ${ids.length} 个对话`, 'success');
+  };
+  broadcast.append(input, send); dialog.append(broadcast);
+  const actions = document.createElement('div'); actions.className = 'modal-actions';
+  const close = document.createElement('button'); close.type = 'button'; close.textContent = '关闭'; close.onclick = () => dialog.close();
+  actions.append(close); dialog.append(actions);
+  document.body.append(dialog); dialog.showModal(); dialog.addEventListener('close', () => dialog.remove(), { once: true });
+}
+
 listen('#play-judge', () => {
   if (!hasDocument) { notify('请先打开谱面', 'warning'); return; }
   runHumanLimitTest();

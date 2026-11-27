@@ -426,8 +426,8 @@ export class AgentDialogues {
     this.usage.title = t('agent-dialogues.s876fd01', { p0: usage.estimated ? t('agent-dialogues.sb73b8f5') : t('agent-dialogues.sf8a1d52'), p1: usage.tokens.toLocaleString(), p2: usage.contextWindow.toLocaleString(), p3: policy.automatic ? t('agent-dialogues.s2f62b56') + policy.threshold.toLocaleString() : t('agent-dialogues.sa0822b0') });
     this.usage.setAttribute('aria-valuemax', String(usage.contextWindow)); this.usage.setAttribute('aria-valuenow', String(usage.tokens)); this.usage.setAttribute('aria-valuetext', this.usage.title);
   }
-  async send(source, instruction = '', { compactOnly = false } = {}) {
-    const generation = this.generation, selected = this.store.selected; await Promise.all([this.panel.credentialsReady, this.ready]); if (generation !== this.generation) return;
+  async send(source, instruction = '', { compactOnly = false, recordId = null } = {}) {
+    const generation = this.generation, selected = recordId ?? this.store.selected; await Promise.all([this.panel.credentialsReady, this.ready]); if (generation !== this.generation) return;
     const panel = this.panel, record = this.store.records.get(selected) ?? this.store.current, value = compactOnly ? t('agent-dialogues.s14a8486') : augmentInstruction(source.trim()); if (!value) return;
     if (!panel.key) { panel.configuration(); return; }
     const turn = { id: crypto.randomUUID(), text: value, instruction, compactOnly, status: 'queued', process: [], messages: compactOnly ? [] : [{ role: 'user', content: value }], answer: '', createdAt: Date.now(), undoDepth: this.panel.editor?.raw?.session?.history?.undoStack?.length ?? 0, queueOrder: Date.now() + (this.sequence = (this.sequence ?? 0) + 1) / 1000 };

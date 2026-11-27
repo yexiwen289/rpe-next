@@ -2303,3 +2303,15 @@ body.ui-hide-knowledge #knowledge-open, body.ui-hide-mods #mods-open, body.ui-hi
 .human-limit-item { padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--bg-input); border-radius: var(--r-sm); font-size: 13px; }
 .human-limit-fatal { border-left-color: #ff6b6b; }
 .human-limit-hard { border-left-color: #ffb454; }
+
+.ai-collab-dialog { width: min(720px, 94vw); max-height: 82vh; overflow: auto; padding: 18px; }
+.ai-collab-list { display: grid; gap: 6px; max-height: 42vh; overflow: auto; margin-bottom: 12px; }
+.ai-collab-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-input); }
+.ai-collab-row strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-collab-state { padding: 2px 8px; border-radius: 999px; background: var(--bg-panel); color: var(--muted); font-size: 12px; }
+.ai-collab-state.running { color: var(--accent); border: 1px solid var(--accent); }
+.ai-collab-actions { display: flex; gap: 4px; }
+.ai-collab-actions button, .ai-collab-tools button { padding: 4px 9px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--bg-button); color: var(--text); cursor: pointer; }
+.ai-collab-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.ai-collab-broadcast { display: grid; gap: 8px; }
+.ai-collab-broadcast textarea { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--bg-input); color: var(--text); font: inherit; }

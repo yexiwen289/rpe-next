@@ -56,6 +56,7 @@ import { readEditorPreferences, writeEditorPreferences } from '../platform/edito
 import { ProjectHome } from './home.mjs';
 import { createSettingsPanel, applyUiCustom } from './settings.mjs';
 import { initUiDesigner } from './ui-designer.mjs';
+import { initDevHud } from './dev-hud.mjs';
 import { currentLocale, setLocale, t } from '../i18n.mjs';
 import { localeCandidates, preferredLocales, readLocalePreference, writeLocalePreference } from '../platform/locale.mjs';
 import { installDomTranslation } from './dom-i18n.mjs';
@@ -129,6 +130,7 @@ const element = selector => document.querySelector(selector);
 let mods;
 applyUiCustom();
 initUiDesigner();
+initDevHud();
 let agentPanel;
 globalThis.__rpenModInputGate=true;
 for(const type of ['keydown','keyup','wheel','pointerdown','pointerup','mousedown','mouseup','click','dblclick','contextmenu','drop','dragstart','input','change','submit'])window.addEventListener(type,event=>{

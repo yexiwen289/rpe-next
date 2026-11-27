@@ -2315,3 +2315,5 @@ body.ui-hide-knowledge #knowledge-open, body.ui-hide-mods #mods-open, body.ui-hi
 .ai-collab-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .ai-collab-broadcast { display: grid; gap: 8px; }
 .ai-collab-broadcast textarea { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--bg-input); color: var(--text); font: inherit; }
+.dev-hud { position: fixed; z-index: 20001; right: 8px; bottom: 8px; display: grid; gap: 2px; padding: 6px 8px; border: 1px solid #3f6; border-radius: 4px; background: #07120cdd; color: #6f9; font: 10px/1.35 Consolas, monospace; letter-spacing: .5px; text-shadow: 0 0 6px #3f6; pointer-events: none; }
+.dev-hud b { color: #3f6; font-size: 9px; letter-spacing: 2px; }

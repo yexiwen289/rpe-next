@@ -66,3 +66,43 @@ export function autocorrScorePtr(trainPtr: usize, len: i32, lag: f64): f64 {
   const denominator = Math.sqrt(first * second);
   return denominator > 0.0 ? product / denominator : 0.0;
 }
+
+export function concurrentMaxPtr(atPtr: usize, len: i32, window: f64): i32 {
+  if (len <= 0) return 0;
+  let start: i32 = 0, peak: i32 = 0;
+  for (let end = 0; end < len; end++) {
+    while (load<f64>(atPtr + <usize>(end << 3)) - load<f64>(atPtr + <usize>(start << 3)) > window) start++;
+    const count = end - start + 1;
+    if (count > peak) peak = count;
+  }
+  return peak;
+}
+
+function siftDown(events: Float64Array, root: i32, size: i32): void {
+  while (true) {
+    const left = root * 2 + 1, right = left + 1;
+    let largest = root;
+    if (left < size && events[left] > events[largest]) largest = left;
+    if (right < size && events[right] > events[largest]) largest = right;
+    if (largest == root) break;
+    const tmp = events[root]; events[root] = events[largest]; events[largest] = tmp;
+    root = largest;
+  }
+}
+
+export function holdPeakPtr(startsPtr: usize, endsPtr: usize, len: i32): i32 {
+  const events = new Float64Array(len * 2);
+  for (let i = 0; i < len; i++) {
+    events[i * 2] = load<f64>(startsPtr + <usize>(i << 3));
+    events[i * 2 + 1] = -load<f64>(endsPtr + <usize>(i << 3));
+  }
+  const size = events.length;
+  for (let i = size / 2 - 1; i >= 0; i--) siftDown(events, i, size);
+  for (let end = size - 1; end > 0; end--) {
+    const tmp = events[0]; events[0] = events[end]; events[end] = tmp;
+    siftDown(events, 0, end);
+  }
+  let held: i32 = 0, peak: i32 = 0;
+  for (let i = 0; i < size; i++) { held += events[i] > 0.0 ? 1 : -1; if (held > peak) peak = held; }
+  return peak;
+}

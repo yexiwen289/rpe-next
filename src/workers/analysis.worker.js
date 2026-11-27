@@ -70,6 +70,8 @@ self.onmessage = async event => {
       result = detectSections(new Float64Array(payload.samples), payload.options);
     } else if (type === 'report') {
       result = generateChartReport(payload.chart, payload.options);
+    } else if (type === 'stats') {
+      result = { wasmBytes: kernels?.memory?.buffer?.byteLength ?? 0 };
     } else throw Error('未知任务类型：' + type);
     const transfer = result?.waveform?.buffer ? [result.waveform.buffer] : [];
     if (result?.spectrum?.buffer) transfer.push(result.spectrum.buffer);

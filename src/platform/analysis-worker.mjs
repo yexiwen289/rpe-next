@@ -56,3 +56,6 @@ export function sectionsInWorker(samples, options = {}) {
 }
 
 export function reportInWorker(chart, options = {}) { return call('report', { chart, options }); }
+
+export function workerQueueSize() { return pending.size; }
+export function workerStats() { try { return call('stats', {}); } catch { return Promise.resolve({ wasmBytes: 0 }); } }

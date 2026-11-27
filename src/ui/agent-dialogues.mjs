@@ -20,7 +20,7 @@ export function agentUsageText(stats) {
 export class AgentDialogues {
   constructor(panel) {
     this.panel = panel; this.store = new AgentConversations(); this.views = new Map(); this.scrollStates = new Map(); this.running = null; this.round = null; this.runsByAgent = new WeakMap(); this.rounds = new WeakMap();
-    this.dirtyTurns = new Set(); this.dirtyMemories = new Set(); this.traceOwners = new Map(); this.activeExchanges = new Map(); this.runs = new Map(); this.turnViews = new WeakMap(); this.ready = Promise.resolve(); this.generation = 0; this.autoQueue = false;
+    this.dirtyTurns = new Set(); this.dirtyMemories = new Set(); this.traceOwners = new Map(); this.activeExchanges = new Map(); this.runs = new Map(); this.active = new Map(); this.turnViews = new WeakMap(); this.ready = Promise.resolve(); this.generation = 0; this.autoQueue = false;
     // 并行上限必须有默认值：未点击「并行 ×3」按钮前 undefined 会让 drain 的
     // `active.size < parallelLimit` 恒为 false，导致所有消息永远停在「等待执行」。
     this.parallelLimit = 3;
@@ -437,7 +437,18 @@ export class AgentDialogues {
     if (!panel.key) { panel.configuration(); return; }
     const turn = { id: crypto.randomUUID(), text: value, instruction, compactOnly, status: 'queued', process: [], messages: compactOnly ? [] : [{ role: 'user', content: value }], answer: '', createdAt: Date.now(), undoDepth: this.panel.editor?.raw?.session?.history?.undoStack?.length ?? 0, queueOrder: Date.now() + (this.sequence = (this.sequence ?? 0) + 1) / 1000 };
     if (!record.turns.length && record.title === t('agent-dialogues.s1b7abf9')) record.title = value.replace(/\s+/g, ' ').slice(0, 24);
-    const parent = this.recordView(record); record.turns.push(turn); this.turnView(record, turn, parent); if (this.store.current === record && !compactOnly) panel.input.value = ''; record.draft = ''; this.save(turn); this.autoQueue = true; this.updateChoices(); this.updateBusy(); this.scroll(true); this.drain(); return turn;
+    const parent = this.recordView(record); record.turns.push(turn); this.turnView(record, turn, parent); if (this.store.current === record && !compactOnly) panel.input.value = ''; record.draft = ''; this.save(turn); this.autoQueue = true; this.updateChoices(); this.updateBusy(); this.scroll(true); this.drain();
+    // 兜底：若 3 秒后仍卡在队列（幽灵 busy / draining 残留），清理并重试一次。
+    setTimeout(() => {
+      if (turn.status !== 'queued') return;
+      const stillQueued = this.queued().some(entry => entry.turn.id === turn.id);
+      if (!stillQueued) return;
+      if (this.draining) this.draining = false;
+      for (const [id, run] of this.active) if (!run.agent.busy) { this.active.delete(id); this.runsByAgent.delete(run.agent); }
+      if (panel.agent.busy) panel.agent.stop();
+      this.drain();
+    }, 3000);
+    return turn;
   }
   queued() { return [...this.store.records.values()].flatMap(record => record.turns.filter(turn => turn.status === 'queued').map(turn => ({ record, turn }))).sort((first, second) => (first.turn.queueOrder ?? first.turn.createdAt) - (second.turn.queueOrder ?? second.turn.createdAt)); }
   pauseQueue() { this.autoQueue = false; for (const { turn, record } of this.queued()) { turn.paused = true; this.save(turn); this.refreshTurn(record, turn); } this.updateBusy(); }
@@ -450,10 +461,11 @@ export class AgentDialogues {
         const next = this.queued().find(entry => !entry.turn.paused && !this.active.has(entry.record.id));
         if (!next) break;
         const agent = this.panel.agentFor(next.record);
-        if (agent.busy) break;
+        if (agent.busy) { this.panel.status.textContent = `排队中：当前任务未结束（agent.busy），上限 ${this.parallelLimit}`; break; }
         await this.start(next.record, next.turn);
       }
-    } finally { this.draining = false; this.updateBusy(); }
+    } catch (error) { this.panel.status.textContent = '队列异常：' + error.message; this.panel.notify('队列异常：' + error.message, 'error'); }
+    finally { this.draining = false; this.updateBusy(); }
   }
   compact() { if (this.busy()) return this.send('', '', { compactOnly: true }); }
   interrupt(source, queued, record = this.store.current) {
@@ -597,5 +609,5 @@ export class AgentDialogues {
     if (state.follow) this.viewport.scrollTop = this.viewport.scrollHeight;
     state.top = this.viewport.scrollTop; state.bottom = Math.max(0, this.viewport.scrollHeight - this.viewport.clientHeight);
   }
-  reset() { for (const run of this.active.values()) run.agent.stop(); for (const agent of this.panel.agents?.values() ?? []) agent.stop(); this.active.clear(); this.panel.agent?.stop(); clearTimeout(this.renderTimer); clearInterval(this.elapsedTimer); this.elapsedTimer = this.renderTimer = null; this.round = null; this.running = null; this.loading = false; this.ready = Promise.resolve(); this.autoQueue = false; this.store = new AgentConversations(); this.views.clear(); this.turnViews = new WeakMap(); this.scrollStates.clear(); this.visibleId = null; this.show(this.store.selected); }
+  reset() { for (const run of this.active.values()) run.agent.stop(); for (const agent of this.panel.agents?.values() ?? []) agent.stop(); this.active.clear(); this.panel.agent?.stop(); clearTimeout(this.renderTimer); clearInterval(this.elapsedTimer); this.elapsedTimer = this.renderTimer = null; this.round = null; this.running = null; this.loading = false; this.ready = Promise.resolve(); this.autoQueue = false; this.active = new Map(); this.store = new AgentConversations(); this.views.clear(); this.turnViews = new WeakMap(); this.scrollStates.clear(); this.visibleId = null; this.show(this.store.selected); }
 }

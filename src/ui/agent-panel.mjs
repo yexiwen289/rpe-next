@@ -159,6 +159,12 @@ export class AgentPanel {
   async configuration() {
     await this.credentialsReady;
     if (this.agent?.busy) return;
+    // 每次打开配置都从凭据库重新读取当前 provider 的密钥，不依赖构造期的缓存。
+    // 双实例/异步时序下 this.key 可能滞后，导致输入框显示为空、看起来像没保存。
+    try {
+      const stored = await this.credentials.read(this.settings.provider);
+      if (stored) this.key = stored;
+    } catch { /* 读取失败时保留已有 key */ }
     this.dialog?.remove(); const dialog = document.createElement('dialog'); dialog.id = 'ai-config'; dialog.dataset.agentPrivate = 'true'; this.dialog = dialog;
     const heading = text('div', '', 'agent-heading'); heading.append(text('h2', t('agent-panel.s8717faa')), button(t('agent-panel.s6c14bd7'), () => dialog.close())); dialog.append(heading);
     const form = document.createElement('form'); form.className = 'agent-config-form';

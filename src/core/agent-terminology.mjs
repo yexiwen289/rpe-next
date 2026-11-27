@@ -21,6 +21,7 @@ export const AGENT_TERMS = Object.freeze({
 
 export function augmentInstruction(text) {
   const source = String(text ?? '');
+  if (source.includes('【术语定义（自动识别')) return source;
   const matched = Object.entries(AGENT_TERMS).filter(([term]) => source.includes(term));
   if (!matched.length) return source;
   return source + '\n\n【术语定义（自动识别，按 VibePhi 高级知识库）】\n' + matched.map(([term, definition]) => `- ${term}：${definition}`).join('\n');

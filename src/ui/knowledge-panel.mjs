@@ -84,8 +84,8 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
   const sidebar = element('div', 'kb-sidebar');
   sidebar.append(element('div', 'kb-sidebar-title', '知识库文档'));
   const newRow = element('div', 'kb-new-row');
-  const newTag = element('input', 'kb-new-tag'); newTag.type = 'text'; newTag.placeholder = '新标签（如：倒打）'; newTag.maxLength = 40;
-  const newButton = element('button', 'kb-new', '＋ 标签新建'); newButton.type = 'button';
+  const newTag = element('input', 'kb-new-tag'); newTag.type = 'text'; newTag.placeholder = '新文档名 / 标签（可含路径）'; newTag.maxLength = 40;
+  const newButton = element('button', 'kb-new', '＋ 新建文档'); newButton.type = 'button';
   newRow.append(newTag, newButton);
   const list = element('div', 'kb-list');
   const sidebarHint = element('p', 'kb-hint',
@@ -103,10 +103,13 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
   const reload = element('button', 'kb-reload', '重新加载');
   const save = element('button', 'kb-save', '保存');
   const saveNote = element('span', 'kb-save-note');
+  const duplicate = element('button', 'kb-duplicate', '复制为可编辑');
+  const rename = element('button', 'kb-rename', '重命名');
+  const remove = element('button', 'kb-remove', '删除');
   const close = element('button', 'kb-close', '关闭');
-  for (const button of [tabPreview, tabEdit, reload, save, close]) button.type = 'button';
+  for (const button of [tabPreview, tabEdit, reload, save, duplicate, rename, remove, close]) button.type = 'button';
   save.disabled = !canWrite;
-  toolbar.append(search, searchCount, tabPreview, tabEdit, reload, save, saveNote, close);
+  toolbar.append(search, searchCount, tabPreview, tabEdit, reload, save, duplicate, rename, remove, saveNote, close);
 
   const notice = element('div', 'kb-notice');
   const preview = element('div', 'kb-preview');
@@ -121,7 +124,7 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
   let destroyed = false, loadToken = 0, saving = false;
   let sourceIndex = null, sourceError = '';
   let docs = [], selectedPath = null, savedText = null, currentText = '', mode = 'preview';
-  let taggedPaths = [];
+  let taggedPaths = [], workspaceDocs = [];
 
   const currentDoc = () => docs.find(item => item.path === selectedPath) ?? null;
 
@@ -213,7 +216,7 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
     for (const preset of PRESET_DOCUMENTS) {
       docs.push({ ...preset, kind: 'baseline', available: paths.has(preset.path), overridePath: overridePath(preset.path) });
     }
-    for (const path of taggedPaths) docs.push({ path, name: '标签 · ' + displayName(path), kind: 'local', available: true, overridePath: null });
+    for (const path of workspaceDocs) docs.push({ path, name: displayName(path), kind: 'local', available: true, overridePath: null });
     for (const path of [...paths].filter(item => item.startsWith('protocols/') && item.endsWith('.md')
       && !PRESET_DOCUMENTS.some(preset => preset.path === item)).sort()) {
       docs.push({ path, name: displayName(path), kind: 'baseline', available: true, overridePath: overridePath(path) });
@@ -310,6 +313,43 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
     }
   }
 
+  // ---------- 完整增删改 ----------
+  async function duplicateCurrent() {
+    const doc = currentDoc(); if (!doc || !canWrite) return;
+    const target = doc.kind === 'local' ? null : doc.overridePath;
+    if (!target) { say('本地文档已可编辑，无需复制。', 'info'); return; }
+    try {
+      if (mode === 'edit') currentText = editor.value;
+      await workspace.call('write', { path: target, text: currentText || savedText || '', overwrite: true });
+      say(`已生成可编辑副本：${target}`, 'success');
+      await refresh(); await selectDoc(target, true);
+    } catch (error) { say('复制失败：' + (error?.message ?? error), 'error'); }
+  }
+
+  async function renameCurrent() {
+    const doc = currentDoc(); if (!doc || !canWrite) return;
+    const next = window.prompt('新名称（可含相对路径，如 knowledge/倒打.md）', doc.path);
+    if (!next || next === doc.path) return;
+    const target = next.includes('/') ? (next.endsWith('.md') ? next : next + '.md') : `${next}.md`;
+    try {
+      await workspace.call('move', { path: doc.path, to: target });
+      say(`已重命名：${target}`, 'success');
+      await refresh(); await selectDoc(target, true);
+    } catch (error) { say('重命名失败：' + (error?.message ?? error), 'error'); }
+  }
+
+  async function removeCurrent() {
+    const doc = currentDoc(); if (!doc || !canWrite) return;
+    const target = doc.kind === 'local' ? doc.path : doc.overridePath;
+    if (!target || !window.confirm(`确认删除：${target}？此操作不可撤销。`)) return;
+    try {
+      await workspace.call('delete', { path: target });
+      say(`已删除：${target}`, 'success');
+      selectedPath = null; savedText = null; currentText = ''; editor.value = '';
+      await refresh();
+    } catch (error) { say('删除失败：' + (error?.message ?? error), 'error'); }
+  }
+
   // ---------- 事件 ----------
   tabPreview.addEventListener('click', () => setMode('preview'));
   tabEdit.addEventListener('click', () => setMode('edit'));
@@ -318,23 +358,30 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
   editor.addEventListener('input', () => { currentText = editor.value; updateSaveState(); });
   newButton.addEventListener('click', () => { void createTaggedDoc(); });
   newTag.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); void createTaggedDoc(); } });
+  duplicate.addEventListener('click', () => { void duplicateCurrent(); });
+  rename.addEventListener('click', () => { void renameCurrent(); });
+  remove.addEventListener('click', () => { void removeCurrent(); });
   search.addEventListener('input', () => { renderPreview(); updateHits(); });
 
   // ---------- 初始化 / 对外接口 ----------
   async function loadTaggedDocs() {
-    taggedPaths = [];
+    workspaceDocs = [];
     if (!canWrite) return;
-    try {
-      const response = await workspace.call('list', { path: 'knowledge/tags', recursive: false, limit: 200 });
-      taggedPaths = (response?.entries ?? []).filter(entry => entry.kind === 'file' && entry.path.endsWith('.md')).map(entry => entry.path).sort();
-    } catch { /* 目录尚不存在 */ }
+    const found = new Set();
+    for (const root of ['knowledge', 'protocols']) {
+      try {
+        const response = await workspace.call('list', { path: root, recursive: root === 'knowledge', limit: 200 });
+        for (const entry of response?.entries ?? []) if (entry.kind === 'file' && entry.path.endsWith('.md') && !PRESET_DOCUMENTS.some(preset => preset.path === entry.path)) found.add(entry.path);
+      } catch { /* 目录尚不存在 */ }
+    }
+    workspaceDocs = [...found].sort();
   }
 
   async function createTaggedDoc() {
     const tag = newTag.value.trim().replace(/[\\/:*?"<>|]/g, '-').slice(0, 40);
     if (!tag) { say('请先输入标签名', 'warning'); newTag.focus(); return; }
     if (!canWrite) { say('工作区不可用，无法新建知识库', 'error'); return; }
-    const path = `knowledge/tags/${tag}.md`;
+    const path = tag.includes('/') ? (tag.endsWith('.md') ? tag : tag + '.md') : `knowledge/${tag}.md`;
     if (docs.some(doc => doc.path === path)) { say('该标签知识库已存在', 'warning'); return; }
     try {
       await workspace.call('write', { path, text: `# ${tag}\n\n标签：${tag}\n\n在此记录该标签下的谱面设计约定、案例与反例。\n`, overwrite: true });

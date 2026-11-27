@@ -2,19 +2,28 @@ import { DEFAULT_EDITOR_PREFERENCES, DEFAULT_SETTINGS } from '../core/default-se
 import { attachRangeValueTooltip } from './range-value-tooltip.mjs';
 import { availableLocales, currentLocale, setLocale, t } from '../i18n.mjs';
 
-const LAZY_KEY = 'vibephi-lazy-ui-v1';
-const LAZY_FIELDS = [['lazyCompact', 'lazy-compact', '紧凑界面（减少留白）'], ['lazyFocus', 'lazy-focus', '专注模式（编辑时隐藏非核心侧栏）'], ['lazyBigTargets', 'lazy-big-targets', '大按钮热区（触屏友好）']];
-export function lazyUiSettings() {
-  try { return { lazyCompact: false, lazyFocus: false, lazyBigTargets: false, ...JSON.parse(localStorage.getItem(LAZY_KEY) ?? '{}') }; } catch { return { lazyCompact: false, lazyFocus: false, lazyBigTargets: false }; }
+const UI_KEY = 'vibephi-ui-custom-v1';
+const PRESETS = Object.freeze({
+  '默认': { accent: '#ffcf5c', muted: '#aaa', fontSize: 13, compact: false, focus: false, bigTargets: false, hideKnowledge: false, hideMods: false, hideMultiLine: false, hideHomeAi: false },
+  '极简': { accent: '#8fe6c1', muted: '#889', fontSize: 12, compact: true, focus: true, bigTargets: false, hideKnowledge: true, hideMods: true, hideMultiLine: true, hideHomeAi: true },
+  '大屏': { accent: '#ffdc70', muted: '#bbb', fontSize: 16, compact: false, focus: false, bigTargets: false, hideKnowledge: false, hideMods: false, hideMultiLine: false, hideHomeAi: false },
+  '触屏': { accent: '#ffb454', muted: '#aaa', fontSize: 15, compact: false, focus: false, bigTargets: true, hideKnowledge: false, hideMods: true, hideMultiLine: true, hideHomeAi: false },
+});
+const COLOR_FIELDS = Object.freeze([['accent', '主题强调色'], ['muted', '次要文字色']]);
+const SWITCH_FIELDS = Object.freeze([['compact', '紧凑界面'], ['focus', '专注模式（隐藏非核心侧栏）'], ['bigTargets', '大按钮热区'], ['hideKnowledge', '隐藏知识库入口'], ['hideMods', '隐藏 MOD 入口'], ['hideMultiLine', '隐藏多行入口'], ['hideHomeAi', '隐藏首页 AI 快捷入口']]);
+export function uiCustomSettings() {
+  try { return { ...PRESETS['默认'], ...JSON.parse(localStorage.getItem(UI_KEY) ?? '{}') }; } catch { return { ...PRESETS['默认'] }; }
 }
-export function applyLazyUi() {
-  const settings = lazyUiSettings();
-  for (const [key, className] of LAZY_FIELDS) document.body.classList.toggle(className, Boolean(settings[key]));
+export function applyUiCustom() {
+  const settings = uiCustomSettings();
+  const root = document.documentElement;
+  root.style.fontSize = `${settings.fontSize}px`;
+  root.style.setProperty('--accent', settings.accent);
+  root.style.setProperty('--muted', settings.muted);
+  for (const [key, className] of [['compact', 'lazy-compact'], ['focus', 'lazy-focus'], ['bigTargets', 'lazy-big-targets'], ['hideKnowledge', 'ui-hide-knowledge'], ['hideMods', 'ui-hide-mods'], ['hideMultiLine', 'ui-hide-multiline'], ['hideHomeAi', 'ui-hide-home-ai']]) document.body.classList.toggle(className, Boolean(settings[key]));
 }
+function saveUiCustom(settings) { localStorage.setItem(UI_KEY, JSON.stringify(settings)); applyUiCustom(); }
 
-// The panel is generated from `t()` keys. Switching the language rebuilds the
-// body in place; the two skin sections and the detail blocks moved out of
-// index.html stay the same nodes so their controllers remain connected.
 export function createSettingsPanel({ onLocaleChange = () => {} } = {}) {
   const dialog = document.createElement('dialog'); dialog.id = 'settings-modal';
   const body = document.createElement('div'); body.className = 'settings-body'; dialog.append(body);
@@ -77,15 +86,32 @@ export function createSettingsPanel({ onLocaleChange = () => {} } = {}) {
     body.append(skins, noteSkins);
 
     const lazy = document.createElement('section'); lazy.className = 'settings-group';
-    const lazyHeading = document.createElement('h3'); lazyHeading.textContent = '懒人式 UI 自定义'; lazy.append(lazyHeading);
-    const values = lazyUiSettings();
-    for (const [key, unused, label] of LAZY_FIELDS) {
+    const lazyHeading = document.createElement('h3'); lazyHeading.textContent = '可视化 UI 自定义'; lazy.append(lazyHeading);
+    const values = uiCustomSettings();
+    const presetRow = document.createElement('div'); presetRow.className = 'ui-preset-row';
+    for (const name of Object.keys(PRESETS)) {
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = name;
+      button.onclick = () => { Object.assign(values, PRESETS[name], { fontSize: PRESETS[name].fontSize }); saveUiCustom(values); rebuild(); };
+      presetRow.append(button);
+    }
+    lazy.append(presetRow);
+    const sizeField = document.createElement('label'); sizeField.className = 'field'; sizeField.append('界面字号');
+    const sizeInput = document.createElement('input'); sizeInput.type = 'range'; sizeInput.min = '11'; sizeInput.max = '20'; sizeInput.step = '1'; sizeInput.value = String(values.fontSize);
+    sizeInput.onchange = () => { values.fontSize = Number(sizeInput.value); saveUiCustom(values); };
+    sizeField.append(sizeInput); lazy.append(sizeField);
+    for (const [key, label] of COLOR_FIELDS) {
       const field = document.createElement('label'); field.className = 'field'; field.append(label);
-      const input = document.createElement('input'); input.type = 'checkbox'; input.id = key; input.checked = Boolean(values[key]);
-      input.onchange = () => { values[key] = input.checked; localStorage.setItem(LAZY_KEY, JSON.stringify(values)); applyLazyUi(); };
+      const input = document.createElement('input'); input.type = 'color'; input.value = values[key];
+      input.oninput = () => { values[key] = input.value; saveUiCustom(values); };
       field.append(input); lazy.append(field);
     }
-    const lazyHint = document.createElement('p'); lazyHint.className = 'hint'; lazyHint.textContent = '设置即时生效并保存在本机；可随时关闭。'; lazy.append(lazyHint);
+    for (const [key, label] of SWITCH_FIELDS) {
+      const field = document.createElement('label'); field.className = 'field'; field.append(label);
+      const input = document.createElement('input'); input.type = 'checkbox'; input.checked = Boolean(values[key]);
+      input.onchange = () => { values[key] = input.checked; saveUiCustom(values); };
+      field.append(input); lazy.append(field);
+    }
+    const lazyHint = document.createElement('p'); lazyHint.className = 'hint'; lazyHint.textContent = '所有改动即时生效并保存在本机；无需编辑任何配置文件。'; lazy.append(lazyHint);
     body.append(lazy);
 
   group(t('settings.s7757a0d'), [['fps-unlimited', t('settings.s0908c46'), 'checkbox', false], ['fps-limit', t('settings.s819ead9'), 'number', DEFAULT_SETTINGS.fpsLimit, 10, undefined, 'any']]);

@@ -4,7 +4,7 @@ import { AgentConversationRepository } from '../platform/agent-store.mjs';
 import { showAgentExchange } from './agent-inspector.mjs';
 import { AGENT_CORE_TOOLS, agentContextPolicy, agentContextUsage, agentContextSignature, estimateAgentTokens, prepareAgentHistory } from '../core/agent-context.mjs';
 import { t } from '../i18n.mjs';
-import { augmentInstruction } from '../core/agent-terminology.mjs';
+import { AGENT_TERMS, augmentInstruction } from '../core/agent-terminology.mjs';
 import { runModelJury } from '../application/model-jury.mjs';
 
 const text = (tag, value, className = '') => { const node = document.createElement(tag); node.textContent = value; node.className = className; return node; };
@@ -368,6 +368,20 @@ export class AgentDialogues {
     this.updateConfigCards();
     this.select.replaceChildren(...[...this.store.records.values()].map(record => { const node = text('option', (this.running?.record === record ? '● ' : '') + record.title); node.value = record.id; return node; })); this.select.value = this.store.selected;
   }
+  updateConfigCards() {
+    if (!this.configCards) return;
+    this.configCards.replaceChildren(...Object.entries(AGENT_TERMS).map(([term, definition]) => {
+      const button = text('button', term, 'agent-config-card'); button.type = 'button';
+      button.title = definition;
+      button.onclick = () => {
+        const input = this.panel.input, insert = `【谱面手法】请选择「${term}」：${definition}。请在写谱时实际采用该手法。`;
+        input.value = input.value ? `${input.value.replace(/\s+$/, '')}\n${insert}` : insert;
+        input.dispatchEvent(new Event('input')); input.focus();
+      };
+      return button;
+    }));
+  }
+
   updateBusy() {
     const busy = this.busy(), loading = Boolean(this.loading);
     this.panel.send.hidden = false; this.panel.send.textContent = busy ? t('agent-dialogues.s91255f6') : t('agent-dialogues.s1214d63'); this.panel.send.disabled = loading;

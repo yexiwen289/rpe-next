@@ -2257,3 +2257,13 @@ body.lazy-compact .panel, body.lazy-compact .settings-group { padding-top: 6px !
 body.lazy-compact button, body.lazy-compact select { min-height: 26px; }
 body.lazy-focus .inspector:not(.ai-tools):not(#ai-tools-panel) { display: none !important; }
 body.lazy-big-targets button, body.lazy-big-targets select, body.lazy-big-targets input[type=checkbox] { min-height: 40px; min-width: 40px; }
+
+.ui-preset-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.ui-preset-row button { padding: 5px 14px; border: 1px solid var(--border-strong); border-radius: var(--r-md); background: var(--bg-button); color: var(--text); cursor: pointer; }
+.ui-preset-row button:hover { border-color: var(--accent); color: var(--accent); }
+body.ui-hide-knowledge #knowledge-open, body.ui-hide-mods #mods-open, body.ui-hide-multiline #multi-line-open, body.ui-hide-home-ai #home-ai-create { display: none !important; }
+
+.ui-preset-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.ui-preset-row button { padding: 5px 14px; border: 1px solid var(--border-strong); border-radius: var(--r-md); background: var(--bg-button); color: var(--text); cursor: pointer; }
+.ui-preset-row button:hover { border-color: var(--accent); color: var(--accent); }
+body.ui-hide-knowledge #knowledge-open, body.ui-hide-mods #mods-open, body.ui-hide-multiline #multi-line-open, body.ui-hide-home-ai #home-ai-create { display: none !important; }

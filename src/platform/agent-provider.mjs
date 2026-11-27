@@ -111,7 +111,13 @@ export function createDeepSeekProvider(request) {
             const index = part.index ?? 0; let entry = calls.get(index);
             if (!entry) { entry = { id: '', type: 'function', function: { name: '', arguments: '' } }; calls.set(index, entry); }
             if (part.id) entry.id = part.id;
-            if (part.function?.name) entry.function.name += part.function.name;
+            if (part.function?.name) {
+              const piece = part.function.name, current = entry.function.name;
+              // 标准 SSE 分片：chart_ + knowledge；某些中转会在多个 chunk 重复发完整名，
+              // 若直接 += 会拼成 chart_knowledgechart_knowledge。已累积内容被新分片包含时跳过。
+              if (!current || piece.startsWith(current)) entry.function.name = piece;
+              else if (!current.startsWith(piece)) entry.function.name = current + piece;
+            }
             if (part.function?.arguments) entry.function.arguments += part.function.arguments;
           }
         }
@@ -187,7 +193,13 @@ export function createOpenAIProvider({ id, name, baseUrl, models = [], defaultMo
               const index = part.index ?? 0; let entry = calls.get(index);
               if (!entry) { entry = { id: '', type: 'function', function: { name: '', arguments: '' } }; calls.set(index, entry); }
               if (part.id) entry.id = part.id;
-              if (part.function?.name) entry.function.name += part.function.name;
+              if (part.function?.name) {
+              const piece = part.function.name, current = entry.function.name;
+              // 标准 SSE 分片：chart_ + knowledge；某些中转会在多个 chunk 重复发完整名，
+              // 若直接 += 会拼成 chart_knowledgechart_knowledge。已累积内容被新分片包含时跳过。
+              if (!current || piece.startsWith(current)) entry.function.name = piece;
+              else if (!current.startsWith(piece)) entry.function.name = current + piece;
+            }
               if (part.function?.arguments) entry.function.arguments += part.function.arguments;
             }
           }

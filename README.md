@@ -10,7 +10,7 @@ Phigros 非官方制谱器。作者 **cmdysj**；本分支界面与交互由 **y
 - 内置 **多 Agent 协同**：多对话并行、任务广播、评审团、概念碰撞、反向教练
 - 计算密集部分走 **Worker + AssemblyScript WASM** 内核，主线程只做 UI
 
-当前版本：**0.13.0**。原项目来源：[在线使用](https://kclg-ysj.github.io/vibephi/) · [源码](https://github.com/kclg-YSJ/vibephi)
+当前版本：**1.0.0**。原项目来源：[在线使用](https://kclg-ysj.github.io/vibephi/) · [源码](https://github.com/kclg-YSJ/vibephi)
 
 ---
 
@@ -41,7 +41,7 @@ npm run build:desktop
 node tools/build-apk.mjs
 ```
 
-产物：`dist-apk/VibePhi-0.13.0-mobile.apk`（包名 `com.vibephi.app`，minSdk 29 / targetSdk 34）。构建机需要 JDK 17、build-tools `android-14`、platform `android-34`（脚本默认在 `E:/android-build` 下查找，可用 `ANDROID_BUILD_TOOLS` 覆盖）与 Python（用于把 dex 与 assets 写入 APK）。首次构建会自动生成签名密钥库。构建时会把 `.env` 中的 `RPE_GLM_API_KEY` / `RPE_SENSENOVA_API_KEY` 注入为 `rpe-env` meta，APK 装完即可直接对话。
+产物：`dist-apk/VibePhi-1.0.0-mobile.apk`（包名 `com.vibephi.app`，minSdk 29 / targetSdk 34）。构建机需要 JDK 17、build-tools `android-14`、platform `android-34`（脚本默认在 `E:/android-build` 下查找，可用 `ANDROID_BUILD_TOOLS` 覆盖）与 Python（用于把 dex 与 assets 写入 APK）。首次构建会自动生成签名密钥库。构建时会把 `.env` 中的 `RPE_GLM_API_KEY` / `RPE_SENSENOVA_API_KEY` 注入为 `rpe-env` meta，APK 装完即可直接对话。
 
 ---
 

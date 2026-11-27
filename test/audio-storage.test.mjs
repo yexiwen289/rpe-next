@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, readdir, lstat, rm, symlink, rename } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, lstat, rm, symlink, rename, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { AudioStorage, installAudioStorage, withAudioStorage } from '../desktop/audio-storage.mjs';
@@ -9,7 +9,7 @@ import { AudioOnsetService, installAudioOnsets } from '../desktop/audio-onsets.m
 import { AudioMapperService, installAudioMapper } from '../desktop/audio-mapper.mjs';
 
 async function fixture(context, options = {}) {
-  const root = await mkdtemp(join(tmpdir(), 'rpen-audio-storage-')); context.after(() => rm(root, { recursive: true, force: true }));
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'rpen-audio-storage-'))); context.after(() => rm(root, { recursive: true, force: true }));
   const roots = Object.fromEntries(['separation', 'onsets', 'mapper'].map(id => [id, join(root, 'original', 'audio-' + id)]));
   const classes = { separation: AudioSeparationService, onsets: AudioOnsetService, mapper: AudioMapperService };
   const config = join(root, 'profile', 'audio-storage.json'), parent = join(root, 'destination'); await mkdir(parent);

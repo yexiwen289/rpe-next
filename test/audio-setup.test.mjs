@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -11,7 +11,7 @@ import { PythonAudioRuntime } from '../desktop/python-audio-runtime.mjs';
 import { writeZip } from '../src/platform/archive.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
-async function fixture(context) { const root = await mkdtemp(join(tmpdir(), 'rpen-setup-')); context.after(() => rm(root, { recursive: true, force: true })); return root; }
+async function fixture(context) { const root = await realpath(await mkdtemp(join(tmpdir(), 'rpen-setup-'))); context.after(() => rm(root, { recursive: true, force: true })); return root; }
 
 test('安装工具固定每个平台的版本与哈希，未知平台不假装支持', async () => {
   for (const platform of ['win32', 'darwin', 'linux']) for (const arch of ['x64', 'arm64']) { const target = audioSetupTarget(platform, arch); assert.match(target.sha256, /^[a-f0-9]{64}$/); assert.ok(target.url.startsWith('https://github.com/astral-sh/uv/releases/download/0.13.5/')); assert.equal(target.pythonVersion, '3.12.14'); }

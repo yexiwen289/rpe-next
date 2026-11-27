@@ -50,6 +50,7 @@
     "@electron/packager": "20.3.0",
     "assemblyscript": "^0.28.20",
     "electron": "44.5.1",
+    "electron-builder": "^26.18.0",
     "yazl": "3.3.1"
   }
 }

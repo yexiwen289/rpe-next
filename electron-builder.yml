@@ -1,0 +1,53 @@
+# electron-builder 配置：产出 Windows 安装包（NSIS）与单文件免安装版（portable）。
+# 复用项目既有的打包内容清单（tools/package-sources.mjs 的 EDITOR_PACKAGE_SOURCES）。
+appId: io.github.kclg-ysj.vibephi
+productName: VibePhi
+copyright: Copyright 2026 cmdysj
+asar: false
+# 直接复用本仓库已安装的 Electron 运行时，避免构建时从 GitHub 拉取发行包。
+electronVersion: 44.5.1
+electronDist: node_modules/electron/dist
+extraMetadata:
+  main: desktop/main.cjs
+directories:
+  output: release/win-1.0.0
+  buildResources: build-resources
+files:
+  - src/core/**/*
+  - src/i18n.mjs
+  - src/locales/**/*
+  - src/application/**/*
+  - src/platform/**/*
+  - src/ui/**/*
+  - desktop/**/*
+  - assets/**/*
+  - index.html
+  - styles.css
+  - protocols/**/*
+  - schemas/**/*
+  - LICENSE
+  - NOTICE
+  - package.json
+win:
+  executableName: RePhiEdit-Next
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  artifactName: VibePhi-${version}-Windows-Setup.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: VibePhi
+  deleteAppDataOnUninstall: false
+  installerLanguages:
+    - zh_CN
+    - en_US
+portable:
+  artifactName: VibePhi-${version}-Windows-Portable.exe

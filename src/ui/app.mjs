@@ -64,7 +64,7 @@ import { showHotkeySettings } from './hotkey-settings.mjs';
 import { mountKnowledgePanel } from './knowledge-panel.mjs';
 import { analyzeAgentAudio } from '../core/agent-audio.mjs';
 import { analyzeHumanLimits, humanLimitsFeedback } from '../core/human-limits.mjs';
-import { analyzeAudioInWorker, refineBpmInWorker } from '../platform/analysis-worker.mjs';
+import { analyzeAudioInWorker, refineBpmInWorker, limitsInWorker, sectionsInWorker, reportInWorker } from '../platform/analysis-worker.mjs';
 import { mountNeteaseSearch } from './netease-search.mjs';
 import { AutoSaveClock } from '../application/autosave.mjs';
 import { ManualSaveQueue } from '../application/manual-save.mjs';
@@ -280,12 +280,14 @@ audioAnalysis.onPeaksToNotes = peaks => {
   notify(`已写入 ${added} 个 Tap 音符（DDC 起音）`, 'success');
 };
 // 自动段落检测：基于全曲 DDC salience 的能量突变，生成时间标记。
-audioAnalysis.onSectionsDetected = () => {
+audioAnalysis.onSectionsDetected = async () => {
   if (!hasDocument || !audio.buffer) { notify('请先打开带音乐的谱面', 'warning'); return; }
   const entry = audioOnsets.fullScan?.get?.(audio.buffer);
   const samples = entry ? energyFromFullScan(entry) : [];
   if (samples.length < 8) { notify('全曲预分析尚未完成，请稍候再试', 'warning'); return; }
-  const sections = detectSections(samples, { minGap: 8, threshold: 1.45 });
+  let sections;
+  try { sections = await sectionsInWorker(samples, { minGap: 8, threshold: 1.45 }); }
+  catch { sections = detectSections(samples, { minGap: 8, threshold: 1.45 }); }
   if (!sections.length) { notify('未检测到明显段落边界', 'warning'); return; }
   const existing = timelineMarkers().filter(marker => !String(marker.name).startsWith('段落') && !String(marker.name).startsWith('前奏 /') && !String(marker.name).startsWith('尾段 /'));
   const markers = [...existing, ...sections].sort((a, b) => a.time - b.time);
@@ -1488,9 +1490,11 @@ element('#file-input').addEventListener('change', async event => {
 listen('#save', () => save());
 listen('#export', () => { noiseEditor.flush(); showExportDialog(session.chart, assets, chartName, (name, format) => { status(t('app.s94b8e7e', { p0: name })); if (format === 'pez') { noteExternalBackup(); storagePanel.refresh().catch(() => {}); } }, libraryProject?.identifier ?? libraryProject?.info?.Path, fileOptions()); });
 // 体检报告：生成独立 HTML 下载，同时存一份到工作区供 AI 查阅。
-listen('#chart-report', () => {
+listen('#chart-report', async () => {
   if (!hasDocument) return;
-  const html = generateChartReport(session.chart, { title: chartName });
+  let html;
+  try { html = await reportInWorker(session.chart, { title: chartName }); }
+  catch { html = generateChartReport(session.chart, { title: chartName }); }
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob), anchor = document.createElement('a');
   anchor.href = url; anchor.download = `${String(chartName || 'chart').replace(/[\\/:*?"<>|]/g, '_')}-体检报告.html`;
@@ -1735,10 +1739,10 @@ async function runConceptCollision(termA, termB, writeChart) {
   notify('融合 Agent 已启动，正在生成新机制方案', 'success');
 }
 
-function runHumanLimitTest() {
+async function runHumanLimitTest() {
   let report;
-  try { report = analyzeHumanLimits(session.chart, tempo); }
-  catch (error) { notify('人类极限测试失败：' + error.message, 'error'); return; }
+  try { report = await limitsInWorker(session.chart); }
+  catch { report = analyzeHumanLimits(session.chart, tempo); }
   const dialog = document.createElement('dialog'); dialog.className = 'human-limit-dialog';
   const title = document.createElement('h3'); title.textContent = '人类极限测试 · ' + report.verdictText; dialog.append(title);
   const summary = document.createElement('p'); summary.className = 'human-limit-summary';

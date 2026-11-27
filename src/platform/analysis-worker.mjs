@@ -38,3 +38,21 @@ export function refineBpmInWorker(peaks, coarse) {
   const strength = Float32Array.from(peaks, peak => peak.strength);
   return call('refine', { seconds, strength, coarse }, [seconds.buffer, strength.buffer]);
 }
+
+export async function analyseAudioInWorker(buffer, options = {}) {
+  const channels = [], transfer = [];
+  for (let index = 0; index < buffer.numberOfChannels; index++) {
+    const copy = buffer.getChannelData(index).slice();
+    channels.push(copy.buffer); transfer.push(copy.buffer);
+  }
+  return call('waveform', { channels, sampleRate: buffer.sampleRate, length: buffer.length, duration: buffer.duration, options }, transfer);
+}
+
+export function limitsInWorker(chart) { return call('limits', { chart }); }
+
+export function sectionsInWorker(samples, options = {}) {
+  const copy = Float64Array.from(samples);
+  return call('sections', { samples: copy, options }, [copy.buffer]);
+}
+
+export function reportInWorker(chart, options = {}) { return call('report', { chart, options }); }

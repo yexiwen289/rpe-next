@@ -1,5 +1,10 @@
 // 计算 Worker：音频分析 / BPM 细化 / 谱面统计全部在后台线程执行。
 import { analyzeAgentAudio } from '../core/agent-audio.mjs';
+import { analyseAudioBuffer } from '../core/audio-analysis-core.mjs';
+import { analyzeHumanLimits } from '../core/human-limits.mjs';
+import { detectSections } from '../core/section-detect.mjs';
+import { generateChartReport } from '../core/chart-report.mjs';
+import { TempoMap } from '../core/tempo.mjs';
 
 let kernels = null;
 async function wasm() {
@@ -56,8 +61,19 @@ self.onmessage = async event => {
       result = { minGap: k.minGapPtr(atPtr, at.length), buckets, peak: k.peakCountPtr(bucketPtr, size) };
     } else if (type === 'refine') {
       result = await refine(new Float64Array(payload.seconds), new Float32Array(payload.strength), payload.coarse);
+    } else if (type === 'waveform') {
+      const channels = payload.channels.map(array => new Float32Array(array));
+      result = analyseAudioBuffer(audioBuffer(channels, payload.sampleRate, payload.length, payload.duration), payload.options);
+    } else if (type === 'limits') {
+      result = analyzeHumanLimits(payload.chart, new TempoMap(payload.chart.BPMList));
+    } else if (type === 'sections') {
+      result = detectSections(new Float64Array(payload.samples), payload.options);
+    } else if (type === 'report') {
+      result = generateChartReport(payload.chart, payload.options);
     } else throw Error('未知任务类型：' + type);
-    self.postMessage({ id, ok: true, result });
+    const transfer = result?.waveform?.buffer ? [result.waveform.buffer] : [];
+    if (result?.spectrum?.buffer) transfer.push(result.spectrum.buffer);
+    self.postMessage({ id, ok: true, result }, transfer);
   } catch (error) {
     self.postMessage({ id, ok: false, error: error?.message ?? String(error) });
   }

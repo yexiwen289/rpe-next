@@ -1,4 +1,5 @@
 import { analyzeAgentAudio } from '../core/agent-audio.mjs';
+import { analyzeAudioInWorker } from '../platform/analysis-worker.mjs';
 import { ONSET_DETECTORS, selectOnsetPeaks, estimateOnsetBpms } from '../core/audio-onsets.mjs';
 import { checkAgentSignal } from '../core/agent-commands.mjs';
 import { LocalOnsetDetector } from '../platform/audio-onsets.mjs';
@@ -77,7 +78,13 @@ export class AudioOnsets extends EventTarget {
     this.controller = new AbortController(); const controller = this.controller, cancel = () => controller.abort(); signal?.addEventListener('abort', cancel, { once: true }); if (signal?.aborted) cancel();
     this.busy = true; this.progress = { message: t('audio-onsets.s8180288') }; this.changed();
     try {
-      if (settings.detector === 'flux') return { ...await analyzeAgentAudio(buffer, { ...settings, signal: controller.signal }), detector: 'flux', threshold: settings.minConfidence, minGap: settings.minGap };
+      if (settings.detector === 'flux') {
+        let analysis;
+        try { analysis = await analyzeAudioInWorker(buffer, settings); }
+        catch { analysis = await analyzeAgentAudio(buffer, { ...settings, signal: controller.signal }); }
+        checkAgentSignal(controller.signal);
+        return { ...analysis, detector: 'flux', threshold: settings.minConfidence, minGap: settings.minGap };
+      }
       let entries = this.cache.get(buffer); if (!entries) { entries = new Map(); this.cache.set(buffer, entries); }
       const key = JSON.stringify([settings.detector, settings.startSeconds, settings.endSeconds, ...(settings.detector === 'mapper' ? [settings.mapperModel, settings.mapperMode, settings.difficulty, settings.seed, settings.timing] : [])]); let raw = entries.get(key), cacheHit = Boolean(raw);
       if (!raw) { raw = await (settings.detector === 'mapper' ? this.mapper : this.detector).analyze(buffer, settings, controller.signal, value => { this.progress = value; this.dispatchEvent(new Event('progress')); }); checkAgentSignal(controller.signal); entries.set(key, raw); if (entries.size > 6) entries.delete(entries.keys().next().value); cacheHit = raw.cacheHit === true; }

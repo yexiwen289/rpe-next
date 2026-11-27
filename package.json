@@ -5,7 +5,9 @@
   "type": "module",
   "description": "VibePhi - rebuilt with WorkBuddy on top of cmdysj's AI (GPT) reconstruction of the original RPE",
   "author": "cmdysj",
-  "contributors": ["yexiwen289 (WorkBuddy rebuild)"],
+  "contributors": [
+    "yexiwen289 (WorkBuddy rebuild)"
+  ],
   "license": "PolyForm-Noncommercial-1.0.0",
   "homepage": "https://kclg-ysj.github.io/vibephi/",
   "repository": {
@@ -41,10 +43,12 @@
     "i18n:audit": "node tools/i18n-audit.mjs",
     "i18n:verify": "node tools/i18n-verify.mjs",
     "i18n:extract": "node tools/i18n-apply.mjs",
-    "i18n:markup": "node tools/i18n-markup.mjs"
+    "i18n:markup": "node tools/i18n-markup.mjs",
+    "build:wasm": "asc as/core.ts -o wasm/vibephi-core.wasm --optimize --runtime stub --initialMemory 64"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",
+    "assemblyscript": "^0.28.20",
     "electron": "44.5.1",
     "yazl": "3.3.1"
   }

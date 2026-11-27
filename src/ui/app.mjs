@@ -64,6 +64,7 @@ import { showHotkeySettings } from './hotkey-settings.mjs';
 import { mountKnowledgePanel } from './knowledge-panel.mjs';
 import { analyzeAgentAudio } from '../core/agent-audio.mjs';
 import { analyzeHumanLimits, humanLimitsFeedback } from '../core/human-limits.mjs';
+import { analyzeAudioInWorker, refineBpmInWorker } from '../platform/analysis-worker.mjs';
 import { mountNeteaseSearch } from './netease-search.mjs';
 import { AutoSaveClock } from '../application/autosave.mjs';
 import { ManualSaveQueue } from '../application/manual-save.mjs';
@@ -2284,14 +2285,19 @@ mountNeteaseSearch({
         // 归一到常见谱面区间后写回 BPMList，覆盖 createChart 默认的 120。
         let bpmNote = '';
         try {
-          const analysis = await analyzeAgentAudio(audio.buffer, {
-            startSeconds: 0, endSeconds: Math.min(audio.buffer.duration, 120), focus: 'percussion',
-          });
+          const options = { startSeconds: 0, endSeconds: Math.min(audio.buffer.duration, 120), focus: 'percussion' };
+          let analysis;
+          try { analysis = await analyzeAudioInWorker(audio.buffer, options); }
+          catch { analysis = await analyzeAgentAudio(audio.buffer, options); }
           const raw = Number(analysis.estimatedBpms?.[0]?.bpm);
           if (Number.isFinite(raw) && raw >= 60 && raw <= 240) {
             // 高 BPM（300+）会被粗估计折半甚至折三分之一，因此同时细化 1/2/3 倍频，按得分择优。
             const strongPeaks = analysis.peaks?.filter(peak => peak.strength > .5) ?? [];
-            const candidates = [refineBpm(strongPeaks, raw), refineBpm(strongPeaks, raw * 2), refineBpm(strongPeaks, raw * 3)];
+            const refineAsync = async candidate => {
+              try { return await refineBpmInWorker(strongPeaks, candidate); }
+              catch { return refineBpm(strongPeaks, candidate); }
+            };
+            const candidates = await Promise.all([refineAsync(raw), refineAsync(raw * 2), refineAsync(raw * 3)]);
             const best = candidates.reduce((left, right) => right.score > left.score ? right : left);
             const bpm = snapBpm(best.bpm);
             const next = { ...session.chart, BPMList: [{ bpm, startTime: [0, 0, 1] }] };

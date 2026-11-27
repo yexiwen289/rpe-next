@@ -10,7 +10,7 @@ electronDist: node_modules/electron/dist
 extraMetadata:
   main: desktop/main.cjs
 directories:
-  output: release/win-1.0.0-r2
+  output: release/win-1.0.0-r3
   buildResources: build-resources
 files:
   - src/core/**/*

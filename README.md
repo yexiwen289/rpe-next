@@ -43,6 +43,19 @@ node tools/build-apk.mjs
 
 产物：`dist-apk/VibePhi-1.0.0-mobile.apk`（包名 `com.vibephi.app`，minSdk 29 / targetSdk 34）。构建机需要 JDK 17、build-tools `android-14`、platform `android-34`（脚本默认在 `E:/android-build` 下查找，可用 `ANDROID_BUILD_TOOLS` 覆盖）与 Python（用于把 dex 与 assets 写入 APK）。首次构建会自动生成签名密钥库。构建时会把 `.env` 中的 `RPE_GLM_API_KEY` / `RPE_SENSENOVA_API_KEY` 注入为 `rpe-env` meta，APK 装完即可直接对话。
 
+### Windows 安装包与单文件版
+
+```sh
+npx electron-builder --win --publish never
+```
+
+产出两个可直接分发的 exe（配置见 `electron-builder.yml`）：
+
+- `VibePhi-1.0.0-Windows-Setup.exe`——NSIS 安装包，可选择安装目录，创建开始菜单与桌面快捷方式，附带卸载项。
+- `VibePhi-1.0.0-Windows-Portable.exe`——单文件免安装版，双击即用。
+
+配置用 `electronDist` 指向本地 `node_modules/electron/dist`，构建时不联网下载 Electron 运行时。
+
 ---
 
 ## AI 制谱工作台

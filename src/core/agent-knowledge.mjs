@@ -92,12 +92,12 @@ export function parseKnowledgeDocument(text) {
   let section = null, entry = null, parent = null;
   const closeEntry = () => { if (entry) { entry.body = entry.body.join('\n').trim(); entries.push(entry); entry = null; } };
   const closeSection = () => { if (section) { section.body = section.body.join('\n').trim(); sections.push(section); section = null; } };
-  let inFence = false;
+  let inFence = false, hasHeading = false;
   for (const line of lines) {
     if (/^\s*```/.test(line)) { inFence = !inFence; if (entry) entry.body.push(line); else if (section) section.body.push(line); continue; }
     if (inFence) { if (entry) entry.body.push(line); else if (section) section.body.push(line); continue; }
     const match = HEADING.exec(line);
-    if (match) {
+    if (match) { hasHeading = true;
       const level = match[1].length, raw = match[2].trim();
       const title = raw.replace(NUMBER_PREFIX, '').trim() || raw;
       if (level <= 2) { closeEntry(); closeSection(); parent = null; section = { level, title: raw, body: [] }; continue; }
@@ -130,6 +130,12 @@ export function parseKnowledgeDocument(text) {
     if (entry) entry.body.push(line); else if (section) section.body.push(line);
   }
   closeEntry(); closeSection();
+  // 非 Markdown 纯文本：按空行分段；没有空行时按行切分，保留原顺序。
+  if (!hasHeading && !entries.length) {
+    const blocks = text.split(/\n\s*\n+/).map(part => part.trim()).filter(Boolean);
+    const pieces = blocks.length > 1 ? blocks : lines.map(line => line.trim()).filter(Boolean);
+    for (let i = 0; i < pieces.length; i++) entries.push({ section: '纯文本', title: pieces[i].split(/[\n。！？]/)[0].slice(0, 40) || `片段 ${i + 1}`, level: 3, body: [pieces[i]] });
+  }
   return { sections: sections.filter(item => item.title), entries };
 }
 

@@ -13,6 +13,7 @@ import { compileExpression } from '../core/batch-script.mjs';
 import { AgentSourceReader } from '../platform/agent-source.mjs';
 
 import { KNOWLEDGE_CATEGORIES, KNOWLEDGE_DOCUMENT_PATH, KNOWLEDGE_LOCAL_PATH, appendKnowledgeEntry, mergeKnowledgeDocuments, parseKnowledgeDocument, searchKnowledge } from '../core/agent-knowledge.mjs';
+import { ingestPlainText, ingestChartPackage, entriesToMarkdown } from './knowledge-ingest.mjs';
 import { registerAgentChartTools } from './agent-chart-tools.mjs';
 import { registerAgentWorkspaceTools } from './agent-workspace-tools.mjs';
 import { registerAgentScriptingTools } from './agent-scripting-tools.mjs';
@@ -76,6 +77,20 @@ export function createAgentEditorCommands(commands, editor, { controls, network,
       },
     };
   }, ['knowledge', 'knowledge base', 'kb', '知识库', '读写', '写', '追加', 'append', 'memory', 'store', 'memory store', 'write', 'design knowledge']);
+  register('knowledge_ingest', '摄取工作区中的任意文本或谱面工程包（pez/zip/json），分析后把经验写入知识库', agentSchema({ path: agentText }, ['path']), 'edit', (args, { signal }) => ({
+    summary: '分析文件并把经验写入知识库',
+    details: { path: args.path },
+    valid: () => Boolean(editor.workspace),
+    apply: async () => {
+      if (!editor.workspace) throw Error('工作区不可用');
+      const bytes = await editor.workspace.call('bytes', { path: args.path }, signal);
+      const result = /\.(pez|zip|json)$/i.test(args.path) ? await ingestChartPackage(args.path, bytes) : ingestPlainText(args.path, bytes);
+      const safe = String(args.path).replace(/[\\/:*?"<>|]/g, '_').slice(-80), target = `knowledge/经验/${safe}.md`;
+      const text = `# ${safe} · 自动提炼经验\n\n来源：${result.source}\n${entriesToMarkdown(result.entries)}`;
+      await editor.workspace.call('write', { path: target, text, overwrite: true }, signal);
+      return { path: target, entries: result.entries.length, source: result.source };
+    },
+  }));
   register('chart_templates', t('agent-editor.s3edd547'), agentSchema({ command: agentText }), 'read', args => ({ apply: () => args.command ? commands.tools().find(tool => tool.function.name === args.command)?.function ?? { error: t('agent-editor.s4b3be4d') } : {
     note: createNote(1, 0, 0), hold: createNote(2, 0, 0, 1), event: createEvent(0, 0, 0, 1), line: createLine(), noiseArea: createNoiseArea(0, 4), noiseTransform: createNoiseEvent(0, 0, 0, 1, { x: 0, y: 0 }),
     scriptApi: { createNote: t('agent-editor.s63f9b5f'), createEvent: '(start,end,startBeat,endBeat)', createLine: '(name?)', createNoiseArea: '(startBeat,endBeat)', createNoiseEvent: '(start,end,startBeat,endBeat,anchor?)', fromNumber: t('agent-editor.s27fbb3b'), beatValue: t('agent-editor.s357cb4b'), parseBeat: t('agent-editor.sc43a600'), easing: '(progress,id)' },

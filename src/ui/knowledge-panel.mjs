@@ -1,5 +1,7 @@
 import { AgentSourceReader } from '../platform/agent-source.mjs';
 import { renderAgentMarkdown } from './agent-markdown.mjs';
+import { ingestPlainText, ingestChartPackage, ingestLibraryProject, entriesToMarkdown } from '../application/knowledge-ingest.mjs';
+import { listProjects } from '../platform/library.mjs';
 
 // 本地增量知识库：与 agent-editor / chart_knowledge_write 使用同一个路径。
 const LOCAL_PATH = 'knowledge.local.md';
@@ -87,10 +89,18 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
   const newTag = element('input', 'kb-new-tag'); newTag.type = 'text'; newTag.placeholder = '新文档名 / 标签（可含路径）'; newTag.maxLength = 40;
   const newButton = element('button', 'kb-new', '＋ 新建文档'); newButton.type = 'button';
   newRow.append(newTag, newButton);
+  const importRow = element('div', 'kb-new-row');
+  const fileInput = element('input', 'kb-new-tag'); fileInput.type = 'file'; fileInput.accept = '.md,.txt,.json,.jsonl,.lrc,.log,.pez,.zip,*/*'; fileInput.title = '导入任意纯文本 / 谱面工程包';
+  const importButton = element('button', 'kb-new', '分析并写入'); importButton.type = 'button';
+  importRow.append(fileInput, importButton);
+  const libraryRow = element('div', 'kb-new-row');
+  const librarySelect = element('select', 'kb-new-tag'); librarySelect.title = '谱面库中的谱面';
+  const libraryButton = element('button', 'kb-new', '从谱面库提取经验'); libraryButton.type = 'button';
+  libraryRow.append(librarySelect, libraryButton);
   const list = element('div', 'kb-list');
   const sidebarHint = element('p', 'kb-hint',
     canWrite ? '基线协议来自内置知识资源，只读；修改会写入工作区本地副本。' : '工作区不可用：仅可查看基线文档，保存已禁用。');
-  sidebar.append(newRow, list, sidebarHint);
+  sidebar.append(newRow, importRow, libraryRow, list, sidebarHint);
 
   const main = element('div', 'kb-main');
   const toolbar = element('div', 'kb-toolbar');
@@ -350,6 +360,45 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
     } catch (error) { say('删除失败：' + (error?.message ?? error), 'error'); }
   }
 
+  async function saveExperience(name, result) {
+    const safe = String(name).replace(/[\\/:*?"<>|]/g, '_').slice(0, 80);
+    const target = `knowledge/经验/${safe}.md`;
+    const markdown = `# ${safe} · 自动提炼经验\n\n来源：${result.source}\n${entriesToMarkdown(result.entries)}`;
+    await workspace.call('write', { path: target, text: markdown, overwrite: true });
+    await refresh(); await selectDoc(target, true);
+    say(`已提炼 ${result.entries.length} 条经验并写入：${target}`, 'success');
+  }
+
+  async function importSelectedFile() {
+    const file = fileInput.files?.[0]; if (!file) { say('请先选择文件', 'warning'); return; }
+    if (!canWrite) { say('工作区不可用，无法写入经验', 'error'); return; }
+    try {
+      const bytes = await file.arrayBuffer();
+      const result = /\.(pez|zip|json)$/i.test(file.name) ? await ingestChartPackage(file.name, bytes) : ingestPlainText(file.name, bytes);
+      await saveExperience(file.name, result);
+    } catch (error) { say('分析失败：' + (error?.message ?? error), 'error'); }
+  }
+
+  async function refreshLibrary() {
+    librarySelect.replaceChildren();
+    try {
+      const projects = await listProjects();
+      for (const project of projects) {
+        const option = document.createElement('option'); option.value = String(project.identifier ?? project.id ?? ''); option.textContent = project.summary?.name ?? project.name ?? '未命名谱面';
+        librarySelect.append(option);
+      }
+    } catch { /* 谱面库不可用 */ }
+  }
+
+  async function importFromLibrary() {
+    const id = librarySelect.value; if (!id) { say('谱面库为空或未选择谱面', 'warning'); return; }
+    try {
+      const { readProject } = await import('../platform/library.mjs');
+      const project = await readProject(id);
+      await saveExperience(project?.chartName ?? id, ingestLibraryProject(project));
+    } catch (error) { say('谱面库提取失败：' + (error?.message ?? error), 'error'); }
+  }
+
   // ---------- 事件 ----------
   tabPreview.addEventListener('click', () => setMode('preview'));
   tabEdit.addEventListener('click', () => setMode('edit'));
@@ -357,6 +406,8 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
   save.addEventListener('click', () => { void saveCurrent(); });
   editor.addEventListener('input', () => { currentText = editor.value; updateSaveState(); });
   newButton.addEventListener('click', () => { void createTaggedDoc(); });
+  importButton.addEventListener('click', () => { void importSelectedFile(); });
+  libraryButton.addEventListener('click', () => { void importFromLibrary(); });
   newTag.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); void createTaggedDoc(); } });
   duplicate.addEventListener('click', () => { void duplicateCurrent(); });
   rename.addEventListener('click', () => { void renameCurrent(); });
@@ -409,7 +460,7 @@ export function mountKnowledgePanel({ host, workspace, notify } = {}) {
   }
 
   setMode('preview');
-  void refresh();
+  void refresh(); void refreshLibrary();
 
   const setVisible = visible => {
     root.hidden = !visible;

@@ -48,8 +48,10 @@ self.onmessage = async event => {
     if (type === 'audio') {
       const channels = payload.channels.map(array => new Float32Array(array));
       result = await analyzeAgentAudio(audioBuffer(channels, payload.sampleRate, payload.length, payload.duration), payload.options);
+    } else if (type === 'wasm-info') {
+      result = { wasmBytes: kernels?.memory?.buffer?.byteLength ?? 0 };
     } else if (type === 'stats') {
-      const k = await wasm(), at = new Float64Array(payload.at);
+      const k = await wasm(), at = new Float64Array(payload.at ?? []);
       k.resetAllocator();
       const atPtr = k.allocate(Math.max(8, at.length * 8));
       const size = at.length ? Math.min(4096, Math.ceil(at[at.length - 1]) + 1) : 1;
@@ -70,8 +72,6 @@ self.onmessage = async event => {
       result = detectSections(new Float64Array(payload.samples), payload.options);
     } else if (type === 'report') {
       result = generateChartReport(payload.chart, payload.options);
-    } else if (type === 'stats') {
-      result = { wasmBytes: kernels?.memory?.buffer?.byteLength ?? 0 };
     } else throw Error('未知任务类型：' + type);
     const transfer = result?.waveform?.buffer ? [result.waveform.buffer] : [];
     if (result?.spectrum?.buffer) transfer.push(result.spectrum.buffer);
